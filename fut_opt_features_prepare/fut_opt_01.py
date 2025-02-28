@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
-# Настройки для отображения широкого df pandas
-pd.options.display.width = 1200
-pd.options.display.max_colwidth = 100
-pd.options.display.max_columns = 100
+# # Настройки для отображения широкого df pandas
+# pd.options.display.width = 1200
+# pd.options.display.max_colwidth = 100
+# pd.options.display.max_columns = 100
 
 # Загрузка данных -------------------------------------------------------------
 # Путь к базе данных SQLite
@@ -51,7 +51,7 @@ df = df.merge(df_calls_otm, on='TRADEDATE', how='left')
 df = df.merge(df_puts_itm, on='TRADEDATE', how='left')
 df = df.merge(df_puts_otm, on='TRADEDATE', how='left')
 
-# Заполняем NaN нулями (если на дату нет подходящих опционов)
+# Заполняем NaN нулями (если на дату нет подходящих данных)
 df.fillna(0, inplace=True)
 
 # Создание фичей --------------------------------------------------------------
@@ -77,4 +77,58 @@ scaler = MinMaxScaler(feature_range=(0, 1))
 df['norm_vol'] = scaler.fit_transform(df[['VOLUME_RATIO']])
 
 df = df.drop(columns=['VOLUME_MEAN_10', 'VOLUME_RATIO'])
+
+# Новые фичи: Отношение CALLS_ITM, CALLS_OTM, PUTS_ITM, PUTS_OTM к OPENPOSITION
+df['CALLS_ITM_RATIO'] = df['CALLS_ITM'] / df['OPENPOSITION']
+df['CALLS_OTM_RATIO'] = df['CALLS_OTM'] / df['OPENPOSITION']
+df['PUTS_ITM_RATIO'] = df['PUTS_ITM'] / df['OPENPOSITION']
+df['PUTS_OTM_RATIO'] = df['PUTS_OTM'] / df['OPENPOSITION']
+
+df[['CALLS_ITM_RATIO', 'CALLS_OTM_RATIO', 'PUTS_ITM_RATIO', 'PUTS_OTM_RATIO']] = df[
+    ['CALLS_ITM_RATIO', 'CALLS_OTM_RATIO', 'PUTS_ITM_RATIO', 'PUTS_OTM_RATIO']
+    ].fillna(0)
+
+# Нормализация новых фич
+df[
+    ['CALLS_ITM_RATIO', 'CALLS_OTM_RATIO', 'PUTS_ITM_RATIO', 'PUTS_OTM_RATIO']
+    ] = scaler.fit_transform(
+        df[['CALLS_ITM_RATIO', 'CALLS_OTM_RATIO', 'PUTS_ITM_RATIO', 'PUTS_OTM_RATIO']]
+        )
+
+# Новые фичи: Отношение OPEN, LOW, HIGH к CLOSE текущего дня
+df['OPEN_RATIO'] = df['OPEN'] / df['CLOSE']
+df['LOW_RATIO'] = df['LOW'] / df['CLOSE']
+df['HIGH_RATIO'] = df['HIGH'] / df['CLOSE']
+
+# Нормализация
+df[['OPEN_RATIO', 'LOW_RATIO', 'HIGH_RATIO']] = scaler.fit_transform(
+    df[['OPEN_RATIO', 'LOW_RATIO', 'HIGH_RATIO']]
+    )
+
+# Новые фичи: Отношение цен за предыдущие 10 дней к CLOSE текущего дня
+for col in ['OPEN', 'LOW', 'HIGH', 'CLOSE']:
+    for i in range(1, 5):
+        df[f'{col}_{i}_RATIO'] = df[col].shift(i) / df['CLOSE']
+
+# Нормализация фичей за 10 дней
+cols_to_normalize = (
+    [f'{col}_{i}_RATIO' for col in ['OPEN', 'LOW', 'HIGH', 'CLOSE'] for i in range(1, 5)]
+    )
+df[cols_to_normalize] = scaler.fit_transform(df[cols_to_normalize])
+
+# Создание target -------------------------------------------------------------
+# Создание колонки target (бычий или медвежий бар)
+df['target'] = (df['OPEN'].shift(-1) < df['CLOSE'].shift(-1)).astype(int)
+
+# Удаление строк с NaN
+df = df.dropna()
+
+df = df.drop(
+    columns=['TRADEDATE', 'OPEN', 'LOW', 'HIGH', 'CLOSE', 'VOLUME', 
+             'OPENPOSITION', 'CALLS_ITM', 'CALLS_OTM', 'PUTS_ITM', 'PUTS_OTM']
+    )
+
+df.to_csv('features.csv', index=False)
+
+# print(df.columns.tolist())
 print(df)
