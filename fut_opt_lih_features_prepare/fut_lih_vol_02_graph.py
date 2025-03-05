@@ -204,7 +204,8 @@ for counter in range(1, 99):
             f"Loss: {total_loss / len(train_loader):.4f}, "
             f"Test Accuracy: {accuracy:.2%}, "
             f"Best accuracy: {best_accuracy:.2%}, "
-            f"Epoch best accuracy: {epoch_best_accuracy}"
+            f"Epoch best accuracy: {epoch_best_accuracy}, "
+            f"seed: {counter}"
         )
 
         # === Сохранение лучшей модели ===
@@ -398,6 +399,6 @@ for counter in range(1, 99):
     # plt.xticks(df["TRADEDATE"][::10], rotation=45)
     plt.xticks(df["TRADEDATE"][::10], rotation=90)
     # Сохранение графика в файл
-    plt.savefig(fr"img_lih_vol/fut_lih_vol_02_{counter}.png", dpi=300, bbox_inches='tight')
-    print(f"✅ График сохранен в файл: 'img_lih_vol/fut_lih_vol_02_{counter}.png' \n")
+    plt.savefig(fr"img_lih_vol_02/fut_lih_vol_02_{counter}.png", dpi=300, bbox_inches='tight')
+    print(f"✅ График сохранен в файл: 'img_lih_vol_02/fut_lih_vol_02_{counter}.png' \n")
     # plt.show()

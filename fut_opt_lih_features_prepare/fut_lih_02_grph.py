@@ -96,11 +96,14 @@ for counter in range(1, 99):
 
     train_dataset = CandlestickDataset(X_train, y_train)
     test_dataset = CandlestickDataset(X_test, y_test)
-    # print(X_train)
+    # print(X_train)  # Проверка что перемешивание не испортит результат. Фичи сформированы.
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker)
-    # train_loader = DataLoader(train_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
+    train_loader = DataLoader(
+        train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker
+    )
 
 
     # === 5. СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
@@ -166,7 +169,8 @@ for counter in range(1, 99):
             f"Loss: {total_loss / len(train_loader):.4f}, "
             f"Test Accuracy: {accuracy:.2%}, "
             f"Best accuracy: {best_accuracy:.2%}, "
-            f"Epoch best accuracy: {epoch_best_accuracy}"
+            f"Epoch best accuracy: {epoch_best_accuracy}, "
+            f"seed: {counter}"
         )
 
         # === Сохранение лучшей модели ===
@@ -321,8 +325,8 @@ for counter in range(1, 99):
     plt.grid()
 
     # plt.xticks(rotation=45)
-    plt.xticks(df["TRADEDATE"][::10], rotation=45)
+    plt.xticks(df["TRADEDATE"][::10], rotation=90)
     # Сохранение графика в файл
-    plt.savefig(fr"img/fut_lih_02_{counter}.png", dpi=300, bbox_inches='tight')
-    print(f"✅ График сохранен в файл: 'img/fut_lih_02_{counter}.png' \n")
+    plt.savefig(fr"img_lih_02/fut_lih_02_{counter}.png", dpi=300, bbox_inches='tight')
+    print(f"✅ График сохранен в файл: 'img_lih_02/fut_lih_02_{counter}.png' \n")
     # plt.show()
