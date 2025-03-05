@@ -1,5 +1,6 @@
 """
-Для сохранения графиков в файлы. Лиховидов. Бинарка
+Для сохранения графиков в файлы. Лиховидов и объемы. Бинарка.
+Квантиль объема теперь рассчитывается на основе 10 предыдущих свечей, а не на всей выборке
 """
 
 import sqlite3
@@ -23,9 +24,10 @@ for counter in range(1, 99):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
+
     set_seed(counter)  # Устанавливаем одинаковый seed
 
-    # === 2. ЗАГРУЗКА ДАННЫХ ===
+    # === 1. ЗАГРУЗКА ДАННЫХ ===
     db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day.db')
 
     with sqlite3.connect(db_path) as conn:
@@ -34,27 +36,58 @@ for counter in range(1, 99):
             conn
         )
 
-    # # Фиксация порядка данных (если используем перемешивание)
-    # df_fut = df_fut.sample(frac=1, random_state=42).reset_index(drop=True)
+    # === 2. ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) С ДИНАМИЧЕСКИМ КОДИРОВАНИЕМ ОБЪЕМА ===
+    window_size_volume = 10  # Количество свечей для расчета квантилей
 
-    # === 3. ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
-    def encode_candle(row):
-        open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
+    def encode_volume(index, volume):
+        if index < window_size_volume:
+            return '1'  # Для первых 10 свечей устанавливаем средний объем
 
-        direction = 1 if close > open_ else (0 if close < open_ else 2)
+        past_volumes = df_fut['VOLUME'].iloc[index - window_size_volume:index]
+        low_quantile = past_volumes.quantile(0.33)
+        high_quantile = past_volumes.quantile(0.66)
+
+        if volume <= low_quantile:
+            return '0'  # Низкий объем
+        elif volume <= high_quantile:
+            return '1'  # Средний объем
+        else:
+            return '2'  # Высокий объем
+
+
+    def encode_candle(index, row):
+        open_, low, high, close, volume = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE'], row['VOLUME']
+
+        if close > open_:
+            direction = 1
+        elif close < open_:
+            direction = 0
+        else:
+            direction = 2
+
         upper_shadow = high - max(open_, close)
         lower_shadow = min(open_, close) - low
         body = abs(close - open_)
 
         def classify_shadow(shadow, body):
-            return 0 if shadow < 0.1 * body else (1 if shadow < 0.5 * body else 2)
+            if shadow < 0.1 * body:
+                return 0
+            elif shadow < 0.5 * body:
+                return 1
+            else:
+                return 2
 
-        return f"{direction}{classify_shadow(upper_shadow, body)}{classify_shadow(lower_shadow, body)}"
+        upper_code = classify_shadow(upper_shadow, body)
+        lower_code = classify_shadow(lower_shadow, body)
+
+        volume_code = encode_volume(index, volume)  # Код объема
+
+        return f"{direction}{upper_code}{lower_code}{volume_code}"  # Код свечи + объем
 
 
-    df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
+    df_fut['CANDLE_CODE'] = [encode_candle(i, row) for i, row in df_fut.iterrows()]
 
-    # === 4. ПОДГОТОВКА ДАННЫХ ===
+    # === 3. ПОДГОТОВКА ДАННЫХ ===
     unique_codes = sorted(df_fut['CANDLE_CODE'].unique())
     code_to_int = {code: i for i, code in enumerate(unique_codes)}
     df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
@@ -64,7 +97,10 @@ for counter in range(1, 99):
 
     X, y = [], []
     for i in range(len(df_fut) - window_size - predict_offset):
+        # Add features
         X.append(df_fut['CANDLE_INT'].iloc[i:i + window_size].values)
+
+        # Новый таргет: 1 — рост, 0 — падение
         y.append(
             1 if df_fut['CLOSE'].iloc[i + window_size + predict_offset] >
                  df_fut['CLOSE'].iloc[i + window_size] else 0
@@ -96,14 +132,16 @@ for counter in range(1, 99):
 
     train_dataset = CandlestickDataset(X_train, y_train)
     test_dataset = CandlestickDataset(X_test, y_test)
-    # print(X_train)
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker)
-    # train_loader = DataLoader(train_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
+    train_loader = DataLoader(
+        train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker
+    )
 
 
-    # === 5. СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
+    # === 4. СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
     class CandleLSTM(nn.Module):
         def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
             super(CandleLSTM, self).__init__()
@@ -119,7 +157,7 @@ for counter in range(1, 99):
             return self.sigmoid(x)
 
 
-    # === 6. ОБУЧЕНИЕ МОДЕЛИ С СОХРАНЕНИЕМ ЛУЧШЕЙ ===
+    # === 5. ОБУЧЕНИЕ МОДЕЛИ С СОХРАНЕНИЕМ ЛУЧШЕЙ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = CandleLSTM(
@@ -130,7 +168,7 @@ for counter in range(1, 99):
 
     best_accuracy = 0
     epoch_best_accuracy = 0
-    model_path = "bm_fut_lih_02.pth"
+    model_path = "bm_fut_lih_vol_02.pth"
     early_stop_epochs = 200
     epochs_no_improve = 0
 
@@ -184,7 +222,7 @@ for counter in range(1, 99):
             print(f"🛑 Early stopping at epoch {epoch + 1}")
             break
 
-    # === 7. ЗАГРУЗКА ЛУЧШЕЙ МОДЕЛИ И ТЕСТ ===
+    # === 6. ЗАГРУЗКА ЛУЧШЕЙ МОДЕЛИ И ТЕСТ ===
     print("\n🔹 Loading best model for final evaluation...")
     model.load_state_dict(torch.load(model_path))
     model.eval()
@@ -211,23 +249,59 @@ for counter in range(1, 99):
             conn
         )
 
+    # === 2. ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) С ДИНАМИЧЕСКИМ КОДИРОВАНИЕМ ОБЪЕМА ===
+    window_size_volume = 10  # Количество свечей для расчета квантилей
 
-    # === 2. ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
-    def encode_candle(row):
-        open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
 
-        direction = 1 if close > open_ else (0 if close < open_ else 2)
+    def encode_volume(index, volume):
+        if index < window_size_volume:
+            return '1'  # Для первых 10 свечей устанавливаем средний объем
+
+        past_volumes = df_fut['VOLUME'].iloc[index - window_size_volume:index]
+        low_quantile = past_volumes.quantile(0.33)
+        high_quantile = past_volumes.quantile(0.66)
+
+        if volume <= low_quantile:
+            return '0'  # Низкий объем
+        elif volume <= high_quantile:
+            return '1'  # Средний объем
+        else:
+            return '2'  # Высокий объем
+
+
+    def encode_candle(index, row):
+        open_, low, high, close, volume = (
+            row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE'], row['VOLUME']
+        )
+
+        if close > open_:
+            direction = 1
+        elif close < open_:
+            direction = 0
+        else:
+            direction = 2
+
         upper_shadow = high - max(open_, close)
         lower_shadow = min(open_, close) - low
         body = abs(close - open_)
 
         def classify_shadow(shadow, body):
-            return 0 if shadow < 0.1 * body else (1 if shadow < 0.5 * body else 2)
+            if shadow < 0.1 * body:
+                return 0
+            elif shadow < 0.5 * body:
+                return 1
+            else:
+                return 2
 
-        return f"{direction}{classify_shadow(upper_shadow, body)}{classify_shadow(lower_shadow, body)}"
+        upper_code = classify_shadow(upper_shadow, body)
+        lower_code = classify_shadow(lower_shadow, body)
+
+        volume_code = encode_volume(index, volume)  # Код объема
+
+        return f"{direction}{upper_code}{lower_code}{volume_code}"  # Код свечи + объем
 
 
-    df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
+    df_fut['CANDLE_CODE'] = [encode_candle(i, row) for i, row in df_fut.iterrows()]
 
     # === 3. ПРЕОБРАЗОВАНИЕ КОДОВ В ЧИСЛА ===
     unique_codes = sorted(df_fut['CANDLE_CODE'].unique())
@@ -256,7 +330,7 @@ for counter in range(1, 99):
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = "bm_fut_lih_02.pth"
+    model_path = "bm_fut_lih_vol_02.pth"
     model = CandleLSTM(
         vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32, output_dim=1
     ).to(device)
@@ -277,12 +351,12 @@ for counter in range(1, 99):
     df_fut['PREDICTION'] = [None] * window_size + predictions
 
     # === 7. СОХРАНЕНИЕ РЕЗУЛЬТАТОВ ===
-    df_fut.to_csv("predictions_fut_lih_02.csv", index=False)
-    print("✅ Прогнозы сохранены в 'predictions_fut_lih_02'")
+    df_fut.to_csv("predictions_fut_lih_vol_02.csv", index=False)
+    print("✅ Прогнозы сохранены в 'predictions_fut_lih_vol_02'")
 
     # -------------------------------------------------------------------------------------
     # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
-    df = pd.read_csv("predictions_fut_lih_02.csv")
+    df = pd.read_csv("predictions_fut_lih_vol_02.csv")
 
     split = int(len(df) * 0.8)  # 80% - обучающая выборка, 20% - тестовая
     df = df.iloc[split:].copy()  # Берем последние 20%
@@ -314,15 +388,16 @@ for counter in range(1, 99):
     plt.plot(df["TRADEDATE"], df["CUMULATIVE_RESULT"], label="Cumulative Result", color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
-    plt.title(f"Cumulative Sum of Prediction Accuracy (fut_lih_02) set_seed={counter}, "
+    plt.title(f"Cumulative Sum of Prediction Accuracy (fut_lih_vol_02) set_seed={counter}, "
               f"Best accuracy: {best_accuracy:.2%}, "
               f"Epoch best accuracy: {epoch_best_accuracy}")
     plt.legend()
     plt.grid()
 
     # plt.xticks(rotation=45)
-    plt.xticks(df["TRADEDATE"][::10], rotation=45)
+    # plt.xticks(df["TRADEDATE"][::10], rotation=45)
+    plt.xticks(df["TRADEDATE"][::10], rotation=90)
     # Сохранение графика в файл
-    plt.savefig(fr"img/fut_lih_02_{counter}.png", dpi=300, bbox_inches='tight')
-    print(f"✅ График сохранен в файл: 'img/fut_lih_02_{counter}.png' \n")
+    plt.savefig(fr"img_lih_vol/fut_lih_vol_02_{counter}.png", dpi=300, bbox_inches='tight')
+    print(f"✅ График сохранен в файл: 'img_lih_vol/fut_lih_vol_02_{counter}.png' \n")
     # plt.show()
