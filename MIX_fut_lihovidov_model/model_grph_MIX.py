@@ -1,5 +1,5 @@
 """
-Для сохранения графиков в файлы. Лиховидов. Бинарка
+Для сохранения графиков в файлы. Лиховидов. Бинарка.
 """
 
 import sqlite3
@@ -26,7 +26,7 @@ for counter in range(1, 101):
     set_seed(counter)  # Устанавливаем одинаковый seed
 
     # === 2. ЗАГРУЗКА ДАННЫХ ===
-    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day.db')
+    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\MIX_futures_day.db')
 
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
@@ -133,7 +133,7 @@ for counter in range(1, 101):
 
     best_accuracy = 0
     epoch_best_accuracy = 0
-    model_path = "best_model_graph.pth"
+    model_path = Path(r"best_model_graph_MIX.pth")
     early_stop_epochs = 200
     epochs_no_improve = 0
 
@@ -214,7 +214,7 @@ for counter in range(1, 101):
     #         "SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME FROM Futures",
     #         conn
     #     )
-    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day.db')
+    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\MIX_futures_day.db')
 
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
@@ -235,7 +235,8 @@ for counter in range(1, 101):
         def classify_shadow(shadow, body):
             return 0 if shadow < 0.1 * body else (1 if shadow < 0.5 * body else 2)
 
-        return f"{direction}{classify_shadow(upper_shadow, body)}{classify_shadow(lower_shadow, body)}"
+        return (f"{direction}{classify_shadow(upper_shadow, body)}"
+                f"{classify_shadow(lower_shadow, body)}")
 
 
     df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
@@ -267,7 +268,7 @@ for counter in range(1, 101):
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = "best_model_graph.pth"
+    model_path = Path(r"best_model_graph_MIX.pth")
     model = CandleLSTM(
         vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32, output_dim=1
     ).to(device)
@@ -288,19 +289,19 @@ for counter in range(1, 101):
     df_fut['PREDICTION'] = [None] * window_size + predictions
 
     # === 7. СОХРАНЕНИЕ РЕЗУЛЬТАТОВ ===
-    df_fut.to_csv("predictions_graph.csv", index=False)
-    print("✅ Прогнозы сохранены в 'predictions_graph.csv'")
+    predictions_file = Path(r"predictions_graph_MIX.csv")
+    df_fut.to_csv(predictions_file, index=False)
+    print(f"✅ Прогнозы сохранены в '{predictions_file}'")
 
     # -------------------------------------------------------------------------------------
     # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
-    df = pd.read_csv("predictions_graph.csv")
+    df = pd.read_csv(predictions_file)
 
     split = int(len(df) * 0.8)  # 80% - обучающая выборка, 20% - тестовая
     df = df.iloc[split:].copy()  # Берем последние 20%
 
     # === 2. СМЕЩЕНИЕ ПРОГНОЗА НА ОДИН БАР ВПЕРЁД ===
     df["PREDICTION_SHIFTED"] = df["PREDICTION"].shift(1)  # Смещаем вверх
-
 
     # df
 
@@ -330,10 +331,9 @@ for counter in range(1, 101):
               f"Epoch best accuracy: {epoch_best_accuracy}")
     plt.legend()
     plt.grid()
-
-    # plt.xticks(rotation=45)
     plt.xticks(df["TRADEDATE"][::10], rotation=90)
     # Сохранение графика в файл
-    plt.savefig(fr"img/seed_{counter}.png", dpi=300, bbox_inches='tight')
-    print(f"✅ График сохранен в файл: 'img/seed_{counter}.png' \n")
+    img_path = Path(fr"img_MIX/seed_{counter}_MIX.png")
+    plt.savefig(img_path, dpi=300, bbox_inches='tight')
+    print(f"✅ График сохранен в файл: '{img_path}' \n")
     # plt.show()
