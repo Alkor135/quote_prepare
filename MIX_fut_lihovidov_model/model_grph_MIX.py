@@ -72,6 +72,11 @@ for counter in range(1, 101):
 
     X, y = np.array(X), np.array(y)
 
+    # === Взвешивание классов ===
+    class_counts = np.bincount(y)
+    class_weights = torch.tensor([class_counts[1] / class_counts[0]])
+
+    # === Разделение на обучающую и тестовую выборки ===
     split = int(0.8 * len(X))
     X_train, y_train = X[:split], y[:split]
     X_test, y_test = X[split:], y[split:]
@@ -128,8 +133,14 @@ for counter in range(1, 101):
     model = CandleLSTM(
         vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32, output_dim=1
     ).to(device)
-    criterion = nn.BCELoss()
+
+    # ToDo ----------------------------------------------------------------------------------------
+    # criterion = nn.BCELoss()
+    # optimizer = optim.Adam(model.parameters(), lr=0.001)
+    # === Использование взвешивания классов ===
+    criterion = nn.BCELoss(pos_weight=class_weights.to(device))
     optimizer = optim.Adam(model.parameters(), lr=0.001)
+    # ---------------------------------------------------------------------------------------------
 
     best_accuracy = 0
     epoch_best_accuracy = 0
@@ -207,13 +218,6 @@ for counter in range(1, 101):
 
     # --------------------------------------------------------------------------------------------
     # === 1. ЗАГРУЗКА ДАННЫХ ===
-    # db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day.db')
-
-    # with sqlite3.connect(db_path) as conn:
-    #     df_fut = pd.read_sql_query(
-    #         "SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME FROM Futures",
-    #         conn
-    #     )
     db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\MIX_futures_day.db')
 
     with sqlite3.connect(db_path) as conn:
