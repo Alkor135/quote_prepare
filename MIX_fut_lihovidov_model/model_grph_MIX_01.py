@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 
 for counter in range(1, 101):
+    # === Функция для фиксации случайных чисел ===
     def set_seed(seed=42):
         random.seed(seed)
         np.random.seed(seed)
@@ -20,12 +21,14 @@ for counter in range(1, 101):
 
     set_seed(counter)
 
+    # === Загрузка данных ===
     db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\MIX_futures_day.db')
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
             "SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME FROM Day", conn
         )
 
+    # === Функция кодирования свечей ===
     def encode_candle(row):
         open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
         direction = 1 if close > open_ else 0
@@ -39,6 +42,8 @@ for counter in range(1, 101):
         return f"{direction}{classify_shadow(upper_shadow, body)}{classify_shadow(lower_shadow, body)}"
 
     df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
+
+    # === Преобразование кодов в числа ===
     unique_codes = sorted(df_fut['CANDLE_CODE'].unique())
     code_to_int = {code: i for i, code in enumerate(unique_codes)}
     df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
@@ -50,10 +55,14 @@ for counter in range(1, 101):
         X.append(df_fut['CANDLE_INT'].iloc[i:i + window_size].values)
         y.append(1 if df_fut['CLOSE'].iloc[i + window_size + predict_offset] > df_fut['CLOSE'].iloc[i + window_size] else 0)
 
+    
     X, y = np.array(X), np.array(y)
-    class_counts = np.bincount(y)
-    pos_weight = torch.tensor([class_counts[0] / class_counts[1]]) if class_counts[1] > 0 else torch.tensor([1.0])
 
+    # === Взвешивание классов ===
+    class_counts = np.bincount(y)
+    pos_weight = torch.tensor([class_counts[0] / class_counts[1]]) if class_counts[1] > 0 else torch.tensor([1.0])                                                                                      )
+
+    # === Разделение на обучающую и тестовую выборки ===
     split = int(0.8 * len(X))
     X_train, y_train = X[:split], y[:split]
     X_test, y_test = X[split:], y[split:]
@@ -75,6 +84,7 @@ for counter in range(1, 101):
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
+    # === Определение модели ===
     class CandleLSTM(nn.Module):
         def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
             super(CandleLSTM, self).__init__()
@@ -91,9 +101,12 @@ for counter in range(1, 101):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
+
+    # === Использование взвешивания классов ===
     criterion = nn.BCELoss(pos_weight=pos_weight.to(device))
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
+    # === Обучение модели ===
     best_accuracy = 0
     epochs = 2000
     for epoch in range(epochs):
