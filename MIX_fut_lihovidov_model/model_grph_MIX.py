@@ -1,5 +1,6 @@
 """
 Для сохранения графиков в файлы. Лиховидов. Бинарка.
+Не обрабатывает дисбаланс по классам.
 """
 
 import sqlite3
@@ -55,6 +56,7 @@ for counter in range(1, 101):
     df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
 
     # === 4. ПОДГОТОВКА ДАННЫХ ===
+    # === Преобразование кодов в числа ===
     unique_codes = sorted(df_fut['CANDLE_CODE'].unique())
     code_to_int = {code: i for i, code in enumerate(unique_codes)}
     df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
@@ -72,9 +74,11 @@ for counter in range(1, 101):
 
     X, y = np.array(X), np.array(y)
 
+    #  ----------------------------------------------------------------------------------------
     # === Взвешивание классов ===
     class_counts = np.bincount(y)
     class_weights = torch.tensor([class_counts[1] / class_counts[0]])
+    # ---------------------------------------------------------------------------------------------
 
     # === Разделение на обучающую и тестовую выборки ===
     split = int(0.8 * len(X))
@@ -134,7 +138,7 @@ for counter in range(1, 101):
         vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32, output_dim=1
     ).to(device)
 
-    # ToDo ----------------------------------------------------------------------------------------
+    #  ----------------------------------------------------------------------------------------
     # criterion = nn.BCELoss()
     # optimizer = optim.Adam(model.parameters(), lr=0.001)
     # === Использование взвешивания классов ===
