@@ -1,6 +1,6 @@
 """
 Для сохранения графиков в файлы. Лиховидов. Бинарка.
-Со смещением. (Не правильно, но дает хорошие результаты.)
+С балансировкой классов.
 """
 
 import sqlite3
@@ -12,9 +12,10 @@ import pandas as pd
 import random
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
+from sklearn.utils import resample
 import matplotlib.pyplot as plt
 
-for counter in range(1, 101):
+for counter in range(2, 101):
     # === 1. ФИКСАЦИЯ СЛУЧАЙНЫХ ЧИСЕЛ ДЛЯ ДЕТЕРМИНИРОВАННОСТИ ===
     def set_seed(seed=42):
         random.seed(seed)
@@ -81,7 +82,42 @@ for counter in range(1, 101):
     X_train, y_train = X[:split], y[:split]
     X_test, y_test = X[split:], y[split:]
 
+    # === Балансировка классов === ----------------------------------------------------------------
+    # Объединяем X_train и y_train в один DataFrame для удобства
+    df_train = pd.DataFrame(X_train)
+    df_train['TARGET'] = y_train  # Добавляем колонку с целевыми метками
 
+    # Проверяем распределение классов
+    class_counts = df_train['TARGET'].value_counts()
+    print("Распределение перед балансировкой:\n", class_counts)
+
+    # Определяем миноритарный (редкий) и мажоритарный (основной) классы
+    min_class = class_counts.idxmin()
+    max_class = class_counts.idxmax()
+
+    # Разделяем датасет по классам
+    df_minority = df_train[df_train['TARGET'] == min_class]
+    df_majority = df_train[df_train['TARGET'] == max_class]
+
+    # Дублируем примеры редкого класса до размера основного класса
+    df_minority_upsampled = resample(df_minority,
+                                     replace=True,
+                                     n_samples=len(df_majority),
+                                     random_state=42)
+
+    # Объединяем оба класса и перемешиваем
+    df_balanced = pd.concat([df_majority, df_minority_upsampled]).sample(frac=1, random_state=42)
+
+    # Разделяем обратно на X_train и y_train
+    X_train = df_balanced.drop(
+        columns=['TARGET']).values  # Преобразуем обратно в массив numpy
+    y_train = df_balanced['TARGET'].values
+
+    # Проверяем новое распределение
+    print("Распределение после балансировки:\n", pd.Series(y_train).value_counts())
+    # Конец балансировки --------------------------------------------------------------------------
+
+    # ===
     class CandlestickDataset(Dataset):
         def __init__(self, X, y):
             self.X = torch.tensor(X, dtype=torch.long)
@@ -132,7 +168,7 @@ for counter in range(1, 101):
 
     best_accuracy = 0
     epoch_best_accuracy = 0
-    model_path = Path(r"best_model_graph_RTS.pth")
+    model_path = Path(r"best_model_graph_RTS_bal.pth")
     early_stop_epochs = 200
     epochs_no_improve = 0
 
@@ -207,11 +243,12 @@ for counter in range(1, 101):
     # --------------------------------------------------------------------------------------------
     # === 1. ЗАГРУЗКА ДАННЫХ ===
     db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day.db')
+
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
             """
-            SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
+            SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME
+            FROM Day
             ORDER BY TRADEDATE
             """,
             conn
@@ -243,26 +280,26 @@ for counter in range(1, 101):
     window_size = 20
 
 
-    # === 4. ОПРЕДЕЛЕНИЕ МОДЕЛИ (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
-    class CandleLSTM(nn.Module):
-        def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
-            super(CandleLSTM, self).__init__()
-            self.embedding = nn.Embedding(vocab_size, embedding_dim)
-            self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
-            self.fc = nn.Linear(hidden_dim, output_dim)
-            self.sigmoid = nn.Sigmoid()
-
-        def forward(self, x):
-            x = self.embedding(x)
-            x, _ = self.lstm(x)
-            x = self.fc(x[:, -1, :])
-            return self.sigmoid(x)
+    # # === 4. ОПРЕДЕЛЕНИЕ МОДЕЛИ (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
+    # class CandleLSTM(nn.Module):
+    #     def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
+    #         super(CandleLSTM, self).__init__()
+    #         self.embedding = nn.Embedding(vocab_size, embedding_dim)
+    #         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
+    #         self.fc = nn.Linear(hidden_dim, output_dim)
+    #         self.sigmoid = nn.Sigmoid()
+    #
+    #     def forward(self, x):
+    #         x = self.embedding(x)
+    #         x, _ = self.lstm(x)
+    #         x = self.fc(x[:, -1, :])
+    #         return self.sigmoid(x)
 
 
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = Path(r"best_model_graph_RTS.pth")
+    model_path = Path(r"best_model_graph_RTS_bal.pth")
     model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
@@ -280,31 +317,27 @@ for counter in range(1, 101):
     # Заполняем колонку PREDICTION (первые window_size значений - NaN)
     df_fut['PREDICTION'] = [None] * window_size + predictions
 
-    # === 7. СОХРАНЕНИЕ РЕЗУЛЬТАТОВ ===
-    predictions_file = Path(r"predictions_graph_RTS.csv")
-    df_fut.to_csv(predictions_file, index=False)
-    print(f"✅ Прогнозы сохранены в '{predictions_file}'")
+    # # === 7. СОХРАНЕНИЕ РЕЗУЛЬТАТОВ ===
+    # predictions_file = Path(r"predictions_graph_RTS_01.csv")
+    # df_fut.to_csv(predictions_file, index=False)
+    # print(f"✅ Прогнозы сохранены в '{predictions_file}'")
 
     # -------------------------------------------------------------------------------------
-    # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
-    df = pd.read_csv(predictions_file)
+    # # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
+    # df = pd.read_csv(predictions_file)
 
-    split = int(len(df) * 0.8)  # 80% - обучающая выборка, 20% - тестовая
-    df = df.iloc[split:].copy()  # Берем последние 20%
-
-    # === 2. СМЕЩЕНИЕ ПРОГНОЗА НА ОДИН БАР ВПЕРЁД ===
-    df["PREDICTION_SHIFTED"] = df["PREDICTION"].shift(1)  # Смещаем вверх
-
+    split = int(len(df_fut) * 0.8)  # 80% - обучающая выборка, 20% - тестовая
+    df = df_fut.iloc[split:].copy()  # Берем последние 20%
 
     # df
 
     # === 3. РАСЧЁТ РЕЗУЛЬТАТОВ ПРОГНОЗА ===
     def calculate_result(row):
-        if pd.isna(row["PREDICTION_SHIFTED"]):  # Если NaN после сдвига
+        if pd.isna(row["PREDICTION"]):  # Если NaN после сдвига
             return 0  # Можно удалить или оставить 0
 
         true_direction = 1 if row["CLOSE"] > row["OPEN"] else 0
-        predicted_direction = row["PREDICTION_SHIFTED"]
+        predicted_direction = row["PREDICTION"]
 
         difference = abs(row["CLOSE"] - row["OPEN"])
         return difference if true_direction == predicted_direction else -difference
@@ -319,16 +352,15 @@ for counter in range(1, 101):
     plt.plot(df["TRADEDATE"], df["CUMULATIVE_RESULT"], label="Cumulative Result", color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
-    plt.title(f"Cumulative Sum of Prediction Accuracy. set_seed={counter}, "
+    plt.title(f"Cumulative Sum RTS. set_seed={counter}, "
               f"Best accuracy: {best_accuracy:.2%}, "
               f"Epoch best accuracy: {epoch_best_accuracy}")
     plt.legend()
     plt.grid()
 
-    # plt.xticks(rotation=45)
     plt.xticks(df["TRADEDATE"][::10], rotation=90)
     # Сохранение графика в файл
-    img_path = Path(fr"img_RTS/s_{counter}_RTS.png")
+    img_path = Path(fr"img_RTS_balans/s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}' \n")
     # plt.show()

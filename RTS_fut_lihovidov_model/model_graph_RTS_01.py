@@ -1,6 +1,6 @@
 """
 Для сохранения графиков в файлы. Лиховидов. Бинарка.
-Со смещением. (Не правильно, но дает хорошие результаты.)
+Без смещения.
 """
 
 import sqlite3
@@ -132,7 +132,7 @@ for counter in range(1, 101):
 
     best_accuracy = 0
     epoch_best_accuracy = 0
-    model_path = Path(r"best_model_graph_RTS.pth")
+    model_path = Path(r"best_model_graph_RTS_01.pth")
     early_stop_epochs = 200
     epochs_no_improve = 0
 
@@ -207,6 +207,7 @@ for counter in range(1, 101):
     # --------------------------------------------------------------------------------------------
     # === 1. ЗАГРУЗКА ДАННЫХ ===
     db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day.db')
+
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
             """
@@ -243,26 +244,26 @@ for counter in range(1, 101):
     window_size = 20
 
 
-    # === 4. ОПРЕДЕЛЕНИЕ МОДЕЛИ (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
-    class CandleLSTM(nn.Module):
-        def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
-            super(CandleLSTM, self).__init__()
-            self.embedding = nn.Embedding(vocab_size, embedding_dim)
-            self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
-            self.fc = nn.Linear(hidden_dim, output_dim)
-            self.sigmoid = nn.Sigmoid()
-
-        def forward(self, x):
-            x = self.embedding(x)
-            x, _ = self.lstm(x)
-            x = self.fc(x[:, -1, :])
-            return self.sigmoid(x)
+    # # === 4. ОПРЕДЕЛЕНИЕ МОДЕЛИ (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
+    # class CandleLSTM(nn.Module):
+    #     def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
+    #         super(CandleLSTM, self).__init__()
+    #         self.embedding = nn.Embedding(vocab_size, embedding_dim)
+    #         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
+    #         self.fc = nn.Linear(hidden_dim, output_dim)
+    #         self.sigmoid = nn.Sigmoid()
+    #
+    #     def forward(self, x):
+    #         x = self.embedding(x)
+    #         x, _ = self.lstm(x)
+    #         x = self.fc(x[:, -1, :])
+    #         return self.sigmoid(x)
 
 
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = Path(r"best_model_graph_RTS.pth")
+    model_path = Path(r"best_model_graph_RTS_01.pth")
     model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
@@ -280,21 +281,21 @@ for counter in range(1, 101):
     # Заполняем колонку PREDICTION (первые window_size значений - NaN)
     df_fut['PREDICTION'] = [None] * window_size + predictions
 
-    # === 7. СОХРАНЕНИЕ РЕЗУЛЬТАТОВ ===
-    predictions_file = Path(r"predictions_graph_RTS.csv")
-    df_fut.to_csv(predictions_file, index=False)
-    print(f"✅ Прогнозы сохранены в '{predictions_file}'")
+    # # === 7. СОХРАНЕНИЕ РЕЗУЛЬТАТОВ ===
+    # predictions_file = Path(r"predictions_graph_RTS_01.csv")
+    # df_fut.to_csv(predictions_file, index=False)
+    # print(f"✅ Прогнозы сохранены в '{predictions_file}'")
 
     # -------------------------------------------------------------------------------------
-    # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
-    df = pd.read_csv(predictions_file)
+    # # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
+    # df = pd.read_csv(predictions_file)
 
-    split = int(len(df) * 0.8)  # 80% - обучающая выборка, 20% - тестовая
-    df = df.iloc[split:].copy()  # Берем последние 20%
+    split = int(len(df_fut) * 0.8)  # 80% - обучающая выборка, 20% - тестовая
+    df = df_fut.iloc[split:].copy()  # Берем последние 20%
 
     # === 2. СМЕЩЕНИЕ ПРОГНОЗА НА ОДИН БАР ВПЕРЁД ===
-    df["PREDICTION_SHIFTED"] = df["PREDICTION"].shift(1)  # Смещаем вверх
-
+    # df["PREDICTION_SHIFTED"] = df["PREDICTION"].shift(1)  # Смещаем вверх
+    df["PREDICTION_SHIFTED"] = df["PREDICTION"]  # Без смещения
 
     # df
 
@@ -319,7 +320,7 @@ for counter in range(1, 101):
     plt.plot(df["TRADEDATE"], df["CUMULATIVE_RESULT"], label="Cumulative Result", color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
-    plt.title(f"Cumulative Sum of Prediction Accuracy. set_seed={counter}, "
+    plt.title(f"Cumulative Sum RTS. set_seed={counter}, "
               f"Best accuracy: {best_accuracy:.2%}, "
               f"Epoch best accuracy: {epoch_best_accuracy}")
     plt.legend()
@@ -328,7 +329,7 @@ for counter in range(1, 101):
     # plt.xticks(rotation=45)
     plt.xticks(df["TRADEDATE"][::10], rotation=90)
     # Сохранение графика в файл
-    img_path = Path(fr"img_RTS/s_{counter}_RTS.png")
+    img_path = Path(fr"img_RTS_01/s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}' \n")
     # plt.show()
