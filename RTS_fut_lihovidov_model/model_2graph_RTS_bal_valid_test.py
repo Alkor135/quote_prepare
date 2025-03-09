@@ -1,6 +1,8 @@
 """
 Для сохранения графиков в файлы. Лиховидов. Бинарка.
 С балансировкой классов добавлением рандомных, где нет совпадения по фичам с противоположным классом.
+Финальный тест на независимой выборке.
+Сохранение двух графиков.
 """
 
 import sqlite3
@@ -39,8 +41,9 @@ for counter in range(1, 201):
             conn
         )
 
-    # # Фиксация порядка данных (если используем перемешивание)
-    # df_fut = df_fut.sample(frac=1, random_state=42).reset_index(drop=True)
+    # === Оставляем 10% данных для независимого теста ===
+    split = int(len(df_fut) * 0.9)  # 90% - обучающая выборка, 10% - тестовая независимая выборка
+    df_fut = df_fut.iloc[:split].copy()  # Берем первые 90% на них обучение и валидация
 
     # === 3. ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
     def encode_candle(row):
@@ -77,7 +80,7 @@ for counter in range(1, 201):
 
     X, y = np.array(X), np.array(y)
 
-    split = int(0.9 * len(X))
+    split = int(0.8 * len(X))
     X_train, y_train = X[:split], y[:split]
     X_test, y_test = X[split:], y[split:]
 
@@ -172,7 +175,7 @@ for counter in range(1, 201):
 
     best_accuracy = 0
     epoch_best_accuracy = 0
-    model_path = Path(r"best_model_graph_RTS_bal_01.pth")
+    model_path = Path(r"best_model_2graph_RTS.pth")
     early_stop_epochs = 200
     epochs_no_improve = 0
 
@@ -182,11 +185,13 @@ for counter in range(1, 201):
         total_loss = 0
         for X_batch, y_batch in train_loader:
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+
             optimizer.zero_grad()
             y_pred = model(X_batch).squeeze()
             loss = criterion(y_pred, y_batch)
             loss.backward()
             optimizer.step()
+
             total_loss += loss.item()
 
         # === Проверка на тесте после каждой эпохи ===
@@ -301,7 +306,7 @@ for counter in range(1, 201):
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = Path(r"best_model_graph_RTS_bal_01.pth")
+    model_path = Path(r"best_model_2graph_RTS.pth")
     model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
@@ -328,10 +333,11 @@ for counter in range(1, 201):
     # # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
     # df = pd.read_csv(predictions_file)
 
-    split = int(len(df_fut) * 0.9)  # 80% - обучающая выборка, 20% - тестовая
-    df = df_fut.iloc[split:].copy()  # Берем последние 20%
-
-    # df
+    split = int(len(df_fut) * 0.9)
+    df_test = df_fut.iloc[split:].copy()  # Выборка для независимого теста 10% от полных данных
+    df_tmp = df_fut.iloc[:split].copy()  # 90% от полных данных
+    split = int(len(df_tmp) * 0.8)
+    df_val = df_tmp.iloc[split:].copy()  # Выборка для валидации (20% от 90%)
 
     # === 3. РАСЧЁТ РЕЗУЛЬТАТОВ ПРОГНОЗА ===
     def calculate_result(row):
@@ -345,24 +351,48 @@ for counter in range(1, 201):
         return difference if true_direction == predicted_direction else -difference
 
 
-    df["RESULT"] = df.apply(calculate_result, axis=1)
+    df_val["RESULT"] = df_val.apply(calculate_result, axis=1)
+    df_test["RESULT"] = df_test.apply(calculate_result, axis=1)
 
-    # === 4. ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
-    df["CUMULATIVE_RESULT"] = df["RESULT"].cumsum()
+    df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
+    # print(df_val)
+    df_test["CUMULATIVE_RESULT"] = df_test["RESULT"].cumsum()
+    # print(df_test)
 
-    plt.figure(figsize=(12, 6))
-    plt.plot(df["TRADEDATE"], df["CUMULATIVE_RESULT"], label="Cumulative Result", color="b")
+    # === ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
+    # Создание фигуры
+    # plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(14, 12))
+
+    # Первый подграфик
+    plt.subplot(2, 1, 1)  # (количество строк, количество столбцов, индекс графика)
+    plt.plot(df_val["TRADEDATE"], df_val["CUMULATIVE_RESULT"], label="Cumulative Result",
+             color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
-    plt.title(f"Cumulative Sum RTS. set_seed={counter}, "
+    plt.title(f"Валидация Sum RTS. set_seed={counter}, "
               f"Best accuracy: {best_accuracy:.2%}, "
               f"Epoch best accuracy: {epoch_best_accuracy}")
     plt.legend()
     plt.grid()
+    plt.xticks(df_val["TRADEDATE"][::15], rotation=90)
 
-    plt.xticks(df["TRADEDATE"][::10], rotation=90)
+    # Второй подграфик
+    plt.subplot(2, 1, 2)  # (количество строк, количество столбцов, индекс графика)
+    plt.plot(df_test["TRADEDATE"], df_test["CUMULATIVE_RESULT"], label="Cumulative Result",
+             color="b")
+    plt.xlabel("Date")
+    plt.ylabel("Cumulative Result")
+    plt.title(f"Независимый тест Sum RTS. set_seed={counter}, "
+              f"Best accuracy: {best_accuracy:.2%}, "
+              f"Epoch best accuracy: {epoch_best_accuracy}")
+    plt.legend()
+    plt.grid()
+    plt.xticks(df_test["TRADEDATE"][::10], rotation=90)
+
     # Сохранение графика в файл
-    img_path = Path(fr"img_RTS_balans_01/s_{counter}_RTS.png")
+    plt.tight_layout()
+    img_path = Path(fr"img2_RTS/s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}' \n")
     # plt.show()

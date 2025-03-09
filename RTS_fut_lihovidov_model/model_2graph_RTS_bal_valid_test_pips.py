@@ -1,6 +1,9 @@
 """
 Для сохранения графиков в файлы. Лиховидов. Бинарка.
 С балансировкой классов добавлением рандомных, где нет совпадения по фичам с противоположным классом.
+Финальный тест на независимой выборке.
+Сохранение двух графиков.
+Лучшая модель сохраняется по количеству набранных pips.
 """
 
 import sqlite3
@@ -34,13 +37,15 @@ for counter in range(1, 201):
             """
             SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
             FROM Day 
+            WHERE TRADEDATE >= '2010-01-01' 
             ORDER BY TRADEDATE
             """,
             conn
         )
 
-    # # Фиксация порядка данных (если используем перемешивание)
-    # df_fut = df_fut.sample(frac=1, random_state=42).reset_index(drop=True)
+    # === Оставляем 10% данных для независимого теста ===
+    split = int(len(df_fut) * 0.9)  # 90% - обучающая выборка, 10% - тестовая независимая выборка
+    df_fut = df_fut.iloc[:split].copy()  # Берем первые 90% на них обучение и валидация
 
     # === 3. ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
     def encode_candle(row):
@@ -77,7 +82,7 @@ for counter in range(1, 201):
 
     X, y = np.array(X), np.array(y)
 
-    split = int(0.9 * len(X))
+    split = int(0.8 * len(X))
     X_train, y_train = X[:split], y[:split]
     X_test, y_test = X[split:], y[split:]
 
@@ -121,7 +126,6 @@ for counter in range(1, 201):
     print("Распределение после балансировки:\n", pd.Series(y_train).value_counts())
     # Конец балансировки --------------------------------------------------------------------------
 
-    # ===
     class CandlestickDataset(Dataset):
         def __init__(self, X, y):
             self.X = torch.tensor(X, dtype=torch.long)
@@ -162,7 +166,6 @@ for counter in range(1, 201):
             x = self.fc(x[:, -1, :])
             return self.sigmoid(x)
 
-
     # === 6. ОБУЧЕНИЕ МОДЕЛИ С СОХРАНЕНИЕМ ЛУЧШЕЙ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -170,9 +173,9 @@ for counter in range(1, 201):
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    best_accuracy = 0
-    epoch_best_accuracy = 0
-    model_path = Path(r"best_model_graph_RTS_bal_01.pth")
+    best_pips = float('-inf')
+    epoch_best_pips = 0
+    model_path = Path(r"best_model_2graph_RTS_pips.pth")
     early_stop_epochs = 200
     epochs_no_improve = 0
 
@@ -191,6 +194,26 @@ for counter in range(1, 201):
 
         # === Проверка на тесте после каждой эпохи ===
         model.eval()
+        total_pips = 0
+        with torch.no_grad():
+            batch_start = split  # Начальный индекс тестовой выборки
+            for batch_idx, (X_batch, _) in enumerate(test_loader):
+                X_batch = X_batch.to(device)
+                y_pred = model(X_batch).squeeze().round()
+
+                # Рассчитываем индексы для текущего батча
+                batch_indices = range(batch_start + batch_idx * len(y_pred),
+                                      batch_start + (batch_idx + 1) * len(y_pred))
+
+                for i, idx in enumerate(batch_indices):
+                    if idx + window_size + predict_offset < len(df_fut):
+                        open_price = df_fut.iloc[idx + window_size]['OPEN']
+                        close_price = df_fut.iloc[idx + window_size + predict_offset]['CLOSE']
+                        total_pips += (close_price - open_price) if y_pred[i] == 1 else (
+                                    open_price - close_price)
+
+        # === Проверка на тесте после каждой эпохи ===
+        model.eval()
         correct = 0
         total = 0
         with torch.no_grad():
@@ -204,23 +227,22 @@ for counter in range(1, 201):
         print(
             f"Epoch {epoch + 1}/{epochs}, "
             f"Loss: {total_loss / len(train_loader):.4f}, "
-            f"Test Accuracy: {accuracy:.2%}, "
-            f"Best accuracy: {best_accuracy:.2%}, "
-            f"Epoch best accuracy: {epoch_best_accuracy}, "
+            f"Total Pips: {total_pips}, "
+            f"Best pips: {best_pips}, "
+            f"Epoch best pips: {epoch_best_pips}, "
             f"seed: {counter}"
         )
 
         # === Сохранение лучшей модели ===
-        if accuracy > best_accuracy:
-            best_accuracy = accuracy
+        if total_pips > best_pips:
+            best_pips = total_pips
             epochs_no_improve = 0
-            epoch_best_accuracy = epoch + 1
+            epoch_best_pips = epoch + 1
             torch.save(model.state_dict(), model_path)
-            print(f"✅ Model saved with accuracy: {best_accuracy:.2%}")
+            print(f"✅ Model saved with total pips: {best_pips}")
         else:
             epochs_no_improve += 1
 
-        # === Ранняя остановка ===
         if epochs_no_improve >= early_stop_epochs:
             print(f"🛑 Early stopping at epoch {epoch + 1}")
             break
@@ -244,13 +266,14 @@ for counter in range(1, 201):
 
     # --------------------------------------------------------------------------------------------
     # === 1. ЗАГРУЗКА ДАННЫХ ===
-    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
+    # db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day.db')
 
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
             """
             SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME
-            FROM Day
+            FROM Day 
+            WHERE TRADEDATE >= '2010-01-01' 
             ORDER BY TRADEDATE
             """,
             conn
@@ -281,28 +304,12 @@ for counter in range(1, 201):
 
     window_size = 20
 
-
-    # # === 4. ОПРЕДЕЛЕНИЕ МОДЕЛИ (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
-    # class CandleLSTM(nn.Module):
-    #     def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
-    #         super(CandleLSTM, self).__init__()
-    #         self.embedding = nn.Embedding(vocab_size, embedding_dim)
-    #         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
-    #         self.fc = nn.Linear(hidden_dim, output_dim)
-    #         self.sigmoid = nn.Sigmoid()
-    #
-    #     def forward(self, x):
-    #         x = self.embedding(x)
-    #         x, _ = self.lstm(x)
-    #         x = self.fc(x[:, -1, :])
-    #         return self.sigmoid(x)
-
-
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = Path(r"best_model_graph_RTS_bal_01.pth")
-    model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
+    # model_path = Path(r"best_model_graph_RTS_bal_01.pth")  # Уже есть значение
+    model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32,
+                       output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
@@ -319,19 +326,15 @@ for counter in range(1, 201):
     # Заполняем колонку PREDICTION (первые window_size значений - NaN)
     df_fut['PREDICTION'] = [None] * window_size + predictions
 
-    # # === 7. СОХРАНЕНИЕ РЕЗУЛЬТАТОВ ===
-    # predictions_file = Path(r"predictions_graph_RTS_01.csv")
-    # df_fut.to_csv(predictions_file, index=False)
-    # print(f"✅ Прогнозы сохранены в '{predictions_file}'")
-
     # -------------------------------------------------------------------------------------
     # # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
     # df = pd.read_csv(predictions_file)
 
-    split = int(len(df_fut) * 0.9)  # 80% - обучающая выборка, 20% - тестовая
-    df = df_fut.iloc[split:].copy()  # Берем последние 20%
-
-    # df
+    split = int(len(df_fut) * 0.9)
+    df_test = df_fut.iloc[split:].copy()  # Выборка для независимого теста 10% от полных данных
+    df_tmp = df_fut.iloc[:split].copy()  # 90% от полных данных
+    split = int(len(df_tmp) * 0.8)
+    df_val = df_tmp.iloc[split:].copy()  # Выборка для валидации (20% от 90%)
 
     # === 3. РАСЧЁТ РЕЗУЛЬТАТОВ ПРОГНОЗА ===
     def calculate_result(row):
@@ -345,24 +348,48 @@ for counter in range(1, 201):
         return difference if true_direction == predicted_direction else -difference
 
 
-    df["RESULT"] = df.apply(calculate_result, axis=1)
+    df_val["RESULT"] = df_val.apply(calculate_result, axis=1)
+    df_test["RESULT"] = df_test.apply(calculate_result, axis=1)
 
-    # === 4. ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
-    df["CUMULATIVE_RESULT"] = df["RESULT"].cumsum()
+    df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
+    # print(df_val)
+    df_test["CUMULATIVE_RESULT"] = df_test["RESULT"].cumsum()
+    # print(df_test)
 
-    plt.figure(figsize=(12, 6))
-    plt.plot(df["TRADEDATE"], df["CUMULATIVE_RESULT"], label="Cumulative Result", color="b")
+    # === ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
+    # Создание фигуры
+    # plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(14, 12))
+
+    # Первый подграфик
+    plt.subplot(2, 1, 1)  # (количество строк, количество столбцов, индекс графика)
+    plt.plot(df_val["TRADEDATE"], df_val["CUMULATIVE_RESULT"], label="Cumulative Result",
+             color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
-    plt.title(f"Cumulative Sum RTS. set_seed={counter}, "
-              f"Best accuracy: {best_accuracy:.2%}, "
-              f"Epoch best accuracy: {epoch_best_accuracy}")
+    plt.title(f"Валидация Sum RTS. set_seed={counter}, "
+              f"Best accuracy: {best_pips}, "
+              f"Epoch best accuracy: {epoch_best_pips}")
     plt.legend()
     plt.grid()
+    plt.xticks(df_val["TRADEDATE"][::15], rotation=90)
 
-    plt.xticks(df["TRADEDATE"][::10], rotation=90)
+    # Второй подграфик
+    plt.subplot(2, 1, 2)  # (количество строк, количество столбцов, индекс графика)
+    plt.plot(df_test["TRADEDATE"], df_test["CUMULATIVE_RESULT"], label="Cumulative Result",
+             color="b")
+    plt.xlabel("Date")
+    plt.ylabel("Cumulative Result")
+    plt.title(f"Независимый тест Sum RTS. set_seed={counter}, "
+              f"Best accuracy: {best_pips}, "
+              f"Epoch best accuracy: {epoch_best_pips}")
+    plt.legend()
+    plt.grid()
+    plt.xticks(df_test["TRADEDATE"][::10], rotation=90)
+
     # Сохранение графика в файл
-    img_path = Path(fr"img_RTS_balans_01/s_{counter}_RTS.png")
+    plt.tight_layout()
+    img_path = Path(fr"img2_RTS_pips/s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}' \n")
     # plt.show()
