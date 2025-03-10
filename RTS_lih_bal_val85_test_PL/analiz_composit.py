@@ -75,7 +75,7 @@ def sortino_ratio(daily_returns, risk_free_rate=0.0, periods_per_year=252):
         return np.nan
 
 
-# Загрузка данных
+# Загрузка данных. 'TRADEDATE' в индекс.
 df = pd.read_csv("pred_res_cum.csv", index_col=0, parse_dates=True)
 
 df = df.loc[:, df.columns.str.startswith('CUM')]

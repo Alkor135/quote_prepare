@@ -383,7 +383,7 @@ for counter in range(1, 101):
             suffixes=('_x', '_y')  # добавляем суффиксы для различения одинаковых колонок
         )
 
-    # === 4. Сохранение графика в файл ===
+    # === 4. Сохранение данных в файл ===
     df_data.to_csv(data_path, index=False)
     print(f"✅ Данные сохранены в файл: '{data_path}' \n")
     print(df_data)
