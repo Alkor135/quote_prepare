@@ -1,3 +1,9 @@
+"""
+Анализ композитного индекса.
+"Max Drawdown": mdd, "CAGR": growth, "Smoothness R²": smoothness, "Recovery Factor": recovery,
+"Sharpe Ratio": sharpe, "Sortino Ratio": sortino, "Max Profit": cum_returns.max(),
+"Composite Index": composite_index
+"""
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
