@@ -2,7 +2,7 @@
 Для сохранения графиков в файлы. Лиховидов. Бинарка.
 С балансировкой классов добавлением рандомных, где нет совпадения по фичам с противоположным классом.
 Лучшая модель сохраняется по Profit - Loss критерию.
-Только валидация.
+Только тест.
 """
 import sqlite3
 import torch
@@ -22,8 +22,9 @@ import os
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
+# Определение путей
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
-model_path = Path(r"best_model_profit_loss_val.pth")
+model_path = Path("best_model_profit_loss_test.pth")
 
 for counter in range(1, 101):
     def set_seed(seed=42):
@@ -101,7 +102,8 @@ for counter in range(1, 101):
     df_minority = df_train[df_train['TARGET'] == min_class]
     df_majority = df_train[df_train['TARGET'] == max_class]
 
-    # Убираем из миноритарного класса строки, которые полностью совпадают с мажоритарным классом по фичам
+    # Убираем из миноритарного класса строки, которые полностью совпадают с 
+    # мажоритарным классом по фичам
     df_minority_unique = df_minority.loc[
         ~df_minority.drop(columns=['TARGET']).apply(tuple, axis=1).isin(
             df_majority.drop(columns=['TARGET']).apply(tuple, axis=1)
@@ -168,13 +170,13 @@ for counter in range(1, 101):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32,
-                        output_dim=1).to(device)
+                       output_dim=1).to(device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     best_net_pips = float('-inf')  # Храним лучший критерий profit - loss
     epoch_best = 0
-    # model_path = Path("best_model_profit_loss.pth")
+    # model_path = Path("best_model_profit_loss.pth")  Уже определено
     early_stop_epochs = 200
     epochs_no_improve = 0
 
@@ -204,11 +206,11 @@ for counter in range(1, 101):
 
                 # Рассчитываем индексы для текущего батча
                 batch_indices = range(batch_start + batch_idx * len(y_pred),
-                                        batch_start + (batch_idx + 1) * len(y_pred))
+                                      batch_start + (batch_idx + 1) * len(y_pred))
 
                 for i, idx in enumerate(batch_indices):
                     if idx + window_size + predict_offset < len(df_fut):
-                        open_price = df_fut.iloc[idx + window_size]['OPEN']
+                        open_price = df_fut.iloc[idx + window_size + predict_offset]['OPEN']
                         close_price = df_fut.iloc[idx + window_size + predict_offset]['CLOSE']
 
                         if y_pred[i] == 1:  # Прогноз роста
@@ -267,13 +269,13 @@ for counter in range(1, 101):
 
     # --------------------------------------------------------------------------------------------
     # === 1. ЗАГРУЗКА ДАННЫХ ===
-
+    # WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01'
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
             """
             SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
             FROM Day 
-            WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
+            WHERE TRADEDATE >= '2014-01-01' 
             ORDER BY TRADEDATE
             """,
             conn
@@ -322,7 +324,7 @@ for counter in range(1, 101):
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # model_path = Path(r"best_model_graph_RTS_bal_01.pth")  # Уже есть значение
+    # model_path = Path("best_model_profit_loss_test.pth")  # Уже определено
     model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32,
                        output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
@@ -350,8 +352,9 @@ for counter in range(1, 101):
     # # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
     # df = pd.read_csv(predictions_file)
 
-    split = int(len(df_fut) * 0.85)  # 80% - обучающая выборка, 20% - тестовая
-    df = df_fut.iloc[split:].copy()  # Берем последние 20%
+    # Выбор строк, где TRADEDATE больше 2024-01-01
+    df = df_fut[df_fut['TRADEDATE'] > '2024-01-01'].copy()
+    # df = df_fut.iloc[split:].copy()  # Берем последние 20%
 
     # === 3. РАСЧЁТ РЕЗУЛЬТАТОВ ПРОГНОЗА ===
     def calculate_result(row):
@@ -384,7 +387,7 @@ for counter in range(1, 101):
 
     plt.xticks(df["TRADEDATE"][::10], rotation=90)
     # Сохранение графика в файл
-    img_path = Path(fr"img_RTS_net_pips_val\s_{counter}_RTS.png")
+    img_path = Path(fr"img_RTS_net_pips_test\s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}' \n")
     # plt.show()

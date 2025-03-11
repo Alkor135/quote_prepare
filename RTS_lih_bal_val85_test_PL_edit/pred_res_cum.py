@@ -1,8 +1,9 @@
 """
-Для сохранения графиков в файлы. Лиховидов. Бинарка.
+Для обучения моделей с разными гиперпараметрами. Лиховидов. Бинарка.
 С балансировкой классов добавлением рандомных, где нет совпадения по фичам с противоположным классом.
 Лучшая модель сохраняется по Profit - Loss критерию.
-Только валидация.
+Только тест.
+Сохранение дата фрейма в файл для анализа.
 """
 import sqlite3
 import torch
@@ -14,16 +15,12 @@ import random
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 from sklearn.utils import resample
-import matplotlib.pyplot as plt
-import os
 
-
-# Установка рабочей директории в папку, где находится файл скрипта
-script_dir = Path(__file__).parent
-os.chdir(script_dir)
 
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
-model_path = Path(r"best_model_profit_loss_val.pth")
+model_path = Path("best_model_profit_loss_test.pth")
+data_path = Path(fr"pred_res_cum.csv")
+df_data = pd.DataFrame()
 
 for counter in range(1, 101):
     def set_seed(seed=42):
@@ -168,7 +165,7 @@ for counter in range(1, 101):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32,
-                        output_dim=1).to(device)
+                       output_dim=1).to(device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -204,7 +201,7 @@ for counter in range(1, 101):
 
                 # Рассчитываем индексы для текущего батча
                 batch_indices = range(batch_start + batch_idx * len(y_pred),
-                                        batch_start + (batch_idx + 1) * len(y_pred))
+                                      batch_start + (batch_idx + 1) * len(y_pred))
 
                 for i, idx in enumerate(batch_indices):
                     if idx + window_size + predict_offset < len(df_fut):
@@ -267,13 +264,13 @@ for counter in range(1, 101):
 
     # --------------------------------------------------------------------------------------------
     # === 1. ЗАГРУЗКА ДАННЫХ ===
-
+    # WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01'
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
             """
             SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
             FROM Day 
-            WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
+            WHERE TRADEDATE >= '2014-01-01' 
             ORDER BY TRADEDATE
             """,
             conn
@@ -339,7 +336,7 @@ for counter in range(1, 101):
             predictions.append(1 if pred > 0.5 else 0)
 
     # Заполняем колонку PREDICTION (первые window_size значений - NaN)
-    df_fut['PREDICTION'] = [None] * window_size + predictions
+    df_fut[f'PRED_{counter}'] = [None] * window_size + predictions
 
     # # === 7. СОХРАНЕНИЕ РЕЗУЛЬТАТОВ ===
     # predictions_file = Path(r"predictions_graph_RTS_01.csv")
@@ -350,41 +347,43 @@ for counter in range(1, 101):
     # # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
     # df = pd.read_csv(predictions_file)
 
-    split = int(len(df_fut) * 0.85)  # 80% - обучающая выборка, 20% - тестовая
-    df = df_fut.iloc[split:].copy()  # Берем последние 20%
+    # Выбор строк, где TRADEDATE больше 2024-01-01
+    df = df_fut[df_fut['TRADEDATE'] > '2024-01-01'].copy()
+    # df = df_fut.iloc[split:].copy()  # Берем последние 20%
 
     # === 3. РАСЧЁТ РЕЗУЛЬТАТОВ ПРОГНОЗА ===
     def calculate_result(row):
-        if pd.isna(row["PREDICTION"]):  # Если NaN после сдвига
+        if pd.isna(row[f"PRED_{counter}"]):  # Если NaN после сдвига
             return 0  # Можно удалить или оставить 0
 
         true_direction = 1 if row["CLOSE"] > row["OPEN"] else 0
-        predicted_direction = row["PREDICTION"]
+        predicted_direction = row[f"PRED_{counter}"]
 
         difference = abs(row["CLOSE"] - row["OPEN"])
         return difference if true_direction == predicted_direction else -difference
 
 
-    df["RESULT"] = df.apply(calculate_result, axis=1)
+    df[f"RES_{counter}"] = df.apply(calculate_result, axis=1)
+    df[f"CUM_{counter}"] = df[f"RES_{counter}"].cumsum()
+    # print('Проверка counter')
+    # print(df)
 
-    # === 4. ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
-    df["CUMULATIVE_RESULT"] = df["RESULT"].cumsum()
+    if counter == 1:
+        df_data = df
+        # print('Копирование')
+    else:
+        # Выполняем правое слияние
+        # print('Слияние')
+        df_data = pd.merge(
+            df_data,
+            df,
+            how='right',  # правое слияние
+            on=['TRADEDATE', 'OPEN', 'LOW', 'HIGH', 'CLOSE', 'VOLUME', 'CANDLE_CODE',
+                'CANDLE_INT'],
+            suffixes=('_x', '_y')  # добавляем суффиксы для различения одинаковых колонок
+        )
 
-    plt.figure(figsize=(12, 6))
-    plt.plot(df["TRADEDATE"], df["CUMULATIVE_RESULT"], label="Cumulative Result",
-             color="b")
-    plt.xlabel("Date")
-    plt.ylabel("Cumulative Result")
-    plt.title(f"Cumulative Sum RTS. set_seed={counter}, "
-              f"Best pips: {int(best_net_pips)}, "
-              f"Epoch best pips: {epoch_best}, "
-              f"Final Test Accuracy: {final_accuracy:.2%}")
-    plt.legend()
-    plt.grid()
-
-    plt.xticks(df["TRADEDATE"][::10], rotation=90)
-    # Сохранение графика в файл
-    img_path = Path(fr"img_RTS_net_pips_val\s_{counter}_RTS.png")
-    plt.savefig(img_path, dpi=300, bbox_inches='tight')
-    print(f"✅ График сохранен в файл: '{img_path}' \n")
-    # plt.show()
+    # === 4. Сохранение данных в файл ===
+    df_data.to_csv(data_path, index=False)
+    print(f"✅ Данные сохранены в файл: '{data_path}' \n")
+    print(df_data)

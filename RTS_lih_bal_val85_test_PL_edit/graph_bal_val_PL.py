@@ -168,7 +168,7 @@ for counter in range(1, 101):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32,
-                        output_dim=1).to(device)
+                       output_dim=1).to(device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -204,11 +204,11 @@ for counter in range(1, 101):
 
                 # Рассчитываем индексы для текущего батча
                 batch_indices = range(batch_start + batch_idx * len(y_pred),
-                                        batch_start + (batch_idx + 1) * len(y_pred))
+                                      batch_start + (batch_idx + 1) * len(y_pred))
 
                 for i, idx in enumerate(batch_indices):
                     if idx + window_size + predict_offset < len(df_fut):
-                        open_price = df_fut.iloc[idx + window_size]['OPEN']
+                        open_price = df_fut.iloc[idx + window_size + predict_offset]['OPEN']
                         close_price = df_fut.iloc[idx + window_size + predict_offset]['CLOSE']
 
                         if y_pred[i] == 1:  # Прогноз роста
