@@ -54,8 +54,8 @@ print(f"Количество положительных значений: {num_p
 print(f"Количество отрицательных значений: {num_negative}")
 print(f"Сумма положительных значений: {sum_positive}")
 print(f"Сумма отрицательных значений: {sum_negative}")
-print(f"Парных сигналов на покупку: {count_1}")
-print(f"Парных сигналов на продажу: {count_0}")
+print(f"Парных сигналов (от двух моделей) на покупку: {count_1}")
+print(f"Парных сигналов (от двух моделей) на продажу: {count_0}")
 
 # === Подсчет серий (а-ля Мартингейл) ===
 # Удаление всех строк со значением 0.0 в колонке RESULT
@@ -89,12 +89,15 @@ elif current_series_type == 'negative':
 # Сортировка словаря по ключам
 # sorted_dict = dict(sorted(my_dict.items()))
 # series_counts = {'positive': {}, 'negative': {}}
-series_counts = {dict(sorted(series_counts['positive'].items())), dict(sorted(series_counts['negative'].items()))}
+series_counts = {
+    'positive': dict(sorted(series_counts['positive'].items())),
+    'negative': dict(sorted(series_counts['negative'].items()))
+}
 
 print(series_counts)
 
 # Вывод результатов
-print("📊 Статистика серий для положительных значений:")
+print("\n📊 Статистика серий для положительных значений:")
 for length, count in series_counts['positive'].items():
     print(f"{length} положительное(ых) подряд — {count} раз(а)")
 
@@ -102,7 +105,7 @@ print("\n📊 Статистика серий для отрицательных 
 for length, count in series_counts['negative'].items():
     print(f"{length} отрицательное(ых) подряд — {count} раз(а)")
 
-
+# === Построение графиков ===
 plt.figure(figsize=(12, 6))
 plt.plot(df["TRADEDATE"], df["CUMULATIVE_RESULT"], label="Cumulative Result", color="b")
 plt.xlabel("Date")
