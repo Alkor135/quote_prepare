@@ -15,10 +15,15 @@ from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 from sklearn.utils import resample
 import matplotlib.pyplot as plt
+import os
 
+
+# Установка рабочей директории в папку, где находится файл скрипта
+script_dir = Path(__file__).parent
+os.chdir(script_dir)
 
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
-model_path = Path(r"RTS_lih_bal_val85_test_PL\best_model_profit_loss_val.pth")
+model_path = Path(r"best_model_profit_loss_val.pth")
 
 for counter in range(1, 101):
     def set_seed(seed=42):
@@ -379,7 +384,7 @@ for counter in range(1, 101):
 
     plt.xticks(df["TRADEDATE"][::10], rotation=90)
     # Сохранение графика в файл
-    img_path = Path(fr"RTS_lih_bal_val85_test_PL\img_RTS_net_pips_val\s_{counter}_RTS.png")
+    img_path = Path(fr"img_RTS_net_pips_val\s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}' \n")
     # plt.show()
