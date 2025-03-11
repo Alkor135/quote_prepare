@@ -18,7 +18,7 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.utils import resample
 import matplotlib.pyplot as plt
 
-for counter in range(1, 201):
+for counter in range(1, 101):
     # === 1. ФИКСАЦИЯ СЛУЧАЙНЫХ ЧИСЕЛ ДЛЯ ДЕТЕРМИНИРОВАННОСТИ ===
     def set_seed(seed=42):
         random.seed(seed)

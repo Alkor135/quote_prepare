@@ -26,6 +26,7 @@ db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
 model_path = Path(r"best_model_profit_loss_val.pth")
 
 for counter in range(1, 101):
+    # === 1. ФИКСАЦИЯ СЛУЧАЙНЫХ ЧИСЕЛ ДЛЯ ДЕТЕРМИНИРОВАННОСТИ ===
     def set_seed(seed=42):
         random.seed(seed)
         np.random.seed(seed)
@@ -36,6 +37,7 @@ for counter in range(1, 101):
 
     set_seed(counter)  # Устанавливаем одинаковый seed
 
+    # === 2. ЗАГРУЗКА ДАННЫХ ===
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
             """
@@ -47,6 +49,7 @@ for counter in range(1, 101):
             conn
         )
 
+    # === 3. ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
     def encode_candle(row):
         open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
         direction = 1 if close > open_ else (0 if close < open_ else 2)
@@ -63,6 +66,7 @@ for counter in range(1, 101):
 
     df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
 
+    # === 4. ПОДГОТОВКА ДАННЫХ ===
     unique_codes = sorted(df_fut['CANDLE_CODE'].unique())
     code_to_int = {code: i for i, code in enumerate(unique_codes)}
     df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
@@ -191,7 +195,7 @@ for counter in range(1, 101):
             optimizer.step()
             total_loss += loss.item()
 
-        # === Оценка модели по критерию Profit - Loss на тестовой выборке после каждой эпохи ===
+        # === Оценка модели по критерию net pips на тестовой выборке после каждой эпохи ===
         model.eval()
         total_profit = 0
         total_loss_pips = 0
@@ -322,7 +326,6 @@ for counter in range(1, 101):
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # model_path = Path(r"best_model_graph_RTS_bal_01.pth")  # Уже есть значение
     model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32,
                        output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
