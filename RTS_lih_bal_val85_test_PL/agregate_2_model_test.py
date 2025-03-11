@@ -57,6 +57,52 @@ print(f"Сумма отрицательных значений: {sum_negative}")
 print(f"Парных сигналов на покупку: {count_1}")
 print(f"Парных сигналов на продажу: {count_0}")
 
+# === Подсчет серий (а-ля Мартингейл) ===
+# Удаление всех строк со значением 0.0 в колонке RESULT
+df = df[df['RESULT'] != 0.0]
+
+# Подсчет серий положительных и отрицательных значений
+series_counts = {'positive': {}, 'negative': {}}
+current_series_length = 0
+current_series_type = None
+
+for value in df['RESULT']:
+    if value > 0:
+        if current_series_type == 'negative':
+            series_counts['negative'][current_series_length] = series_counts['negative'].get(current_series_length, 0) + 1
+            current_series_length = 0
+        current_series_type = 'positive'
+        current_series_length += 1
+    elif value < 0:
+        if current_series_type == 'positive':
+            series_counts['positive'][current_series_length] = series_counts['positive'].get(current_series_length, 0) + 1
+            current_series_length = 0
+        current_series_type = 'negative'
+        current_series_length += 1
+
+# Учет последней серии
+if current_series_type == 'positive':
+    series_counts['positive'][current_series_length] = series_counts['positive'].get(current_series_length, 0) + 1
+elif current_series_type == 'negative':
+    series_counts['negative'][current_series_length] = series_counts['negative'].get(current_series_length, 0) + 1
+
+# Сортировка словаря по ключам
+# sorted_dict = dict(sorted(my_dict.items()))
+# series_counts = {'positive': {}, 'negative': {}}
+series_counts = {dict(sorted(series_counts['positive'].items())), dict(sorted(series_counts['negative'].items()))}
+
+print(series_counts)
+
+# Вывод результатов
+print("📊 Статистика серий для положительных значений:")
+for length, count in series_counts['positive'].items():
+    print(f"{length} положительное(ых) подряд — {count} раз(а)")
+
+print("\n📊 Статистика серий для отрицательных значений:")
+for length, count in series_counts['negative'].items():
+    print(f"{length} отрицательное(ых) подряд — {count} раз(а)")
+
+
 plt.figure(figsize=(12, 6))
 plt.plot(df["TRADEDATE"], df["CUMULATIVE_RESULT"], label="Cumulative Result", color="b")
 plt.xlabel("Date")
