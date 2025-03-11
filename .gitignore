@@ -172,3 +172,7 @@ cython_debug/
 
 features.csv
 *.csv
+
+*.png
+
+*.pth
