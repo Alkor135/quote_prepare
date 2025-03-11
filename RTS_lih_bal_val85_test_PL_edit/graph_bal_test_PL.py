@@ -193,7 +193,7 @@ for counter in range(1, 101):
             optimizer.step()
             total_loss += loss.item()
 
-        # === Оценка модели по критерию Profit - Loss на тестовой выборке после каждой эпохи ===
+        # === Оценка модели по критерию net pips на тестовой выборке после каждой эпохи ===
         model.eval()
         total_profit = 0
         total_loss_pips = 0
