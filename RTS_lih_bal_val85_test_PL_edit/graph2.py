@@ -4,6 +4,8 @@
 Финальный тест на независимой выборке.
 Сохранение двух графиков.
 Лучшая модель сохраняется по количеству набранных pips.
+Сохранение каждой обученной модели.
+Сохранение результатов в файл csv.
 """
 
 import sqlite3
@@ -26,8 +28,11 @@ os.chdir(script_dir)
 
 # Определение путей
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
+data_path = Path(fr"pred_res_cum.csv")
 
-for counter in range(1, 2):
+df_data = pd.DataFrame()
+
+for counter in range(1, 101):
     # === 1. ФИКСАЦИЯ СЛУЧАЙНЫХ ЧИСЕЛ ДЛЯ ДЕТЕРМИНИРОВАННОСТИ ===
     def set_seed(seed=42):
         random.seed(seed)
@@ -51,9 +56,9 @@ for counter in range(1, 2):
             conn
         )
 
-    # === Оставляем 10% данных для независимого теста ===
-    split = int(len(df_fut) * 0.9)  # 90% - обучающая выборка, 10% - тестовая независимая выборка
-    df_fut = df_fut.iloc[:split].copy()  # Берем первые 90% на них обучение и валидация
+    # # === Оставляем 10% данных для независимого теста ===
+    # split = int(len(df_fut) * 0.9)  # 90% - обучающая выборка, 10% - тестовая независимая выборка
+    # df_fut = df_fut.iloc[:split].copy()  # Берем первые 90% на них обучение и валидация
 
     # === 3. ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
     def encode_candle(row):
@@ -67,7 +72,8 @@ for counter in range(1, 2):
         def classify_shadow(shadow, body):
             return 0 if shadow < 0.1 * body else (1 if shadow < 0.5 * body else 2)
 
-        return f"{direction}{classify_shadow(upper_shadow, body)}{classify_shadow(lower_shadow, body)}"
+        return (f"{direction}{classify_shadow(upper_shadow, body)}"
+                f"{classify_shadow(lower_shadow, body)}")
 
 
     df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
@@ -89,6 +95,7 @@ for counter in range(1, 2):
         )
 
     X, y = np.array(X), np.array(y)
+    print(f"{len(X)=}, {len(y)=}")
 
     split = int(0.85 * len(X))
     X_train, y_train = X[:split], y[:split]
@@ -153,7 +160,6 @@ for counter in range(1, 2):
 
     train_dataset = CandlestickDataset(X_train, y_train)
     test_dataset = CandlestickDataset(X_test, y_test)
-    # print(X_train)  # Проверка что перемешивание не испортит результат. Фичи сформированы.
 
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
@@ -181,9 +187,7 @@ for counter in range(1, 2):
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    # best_pips = float('-inf')  # Храним лучший критерий net pips
-    # epoch_best_pips = 0
-    best_net_pips = float('-inf')  # Храним лучший критерий profit - loss
+    best_net_pips = float('-inf')  # Храним лучший критерий net pips
     epoch_best = 0
     model_path = Path(fr"model\best_model_s_{counter}.pth")
     early_stop_epochs = 200
@@ -334,7 +338,7 @@ for counter in range(1, 2):
             predictions.append(1 if pred > 0.5 else 0)
 
     # Заполняем колонку PREDICTION (первые window_size значений - NaN)
-    df_fut['PREDICTION'] = [None] * window_size + predictions
+    df_fut[f'PRED_{counter}'] = [None] * window_size + predictions
 
     # -------------------------------------------------------------------------------------
     # # === 1. ЗАГРУЗКА ФАЙЛА И ОТБОР ПОСЛЕДНИХ 20% ===
@@ -350,23 +354,43 @@ for counter in range(1, 2):
 
     # === 3. РАСЧЁТ РЕЗУЛЬТАТОВ ПРОГНОЗА ===
     def calculate_result(row):
-        if pd.isna(row["PREDICTION"]):  # Если NaN после сдвига
+        if pd.isna(row[f"PRED_{counter}"]):  # Если NaN 
             return 0  # Можно удалить или оставить 0
 
         true_direction = 1 if row["CLOSE"] > row["OPEN"] else 0
-        predicted_direction = row["PREDICTION"]
+        predicted_direction = row[f"PRED_{counter}"]
 
         difference = abs(row["CLOSE"] - row["OPEN"])
         return difference if true_direction == predicted_direction else -difference
 
 
-    df_val["RESULT"] = df_val.apply(calculate_result, axis=1)
-    df_test["RESULT"] = df_test.apply(calculate_result, axis=1)
+    df_val[f"RES_{counter}"] = df_val.apply(calculate_result, axis=1)
+    df_test[f"RES_{counter}"] = df_test.apply(calculate_result, axis=1)
 
-    df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
+    df_val[f"CUM_{counter}"] = df_val[f"RES_{counter}"].cumsum()
     # print(df_val)
-    df_test["CUMULATIVE_RESULT"] = df_test["RESULT"].cumsum()
+    df_test[f"CUM_{counter}"] = df_test[f"RES_{counter}"].cumsum()
     # print(df_test)
+
+    if counter == 1:
+        df_data = df_test.copy()
+        # print('Копирование')
+    else:
+        # Выполняем правое слияние
+        # print('Слияние')
+        df_data = pd.merge(
+            df_data,
+            df_test,
+            how='right',  # правое слияние
+            on=['TRADEDATE', 'OPEN', 'LOW', 'HIGH', 'CLOSE', 'VOLUME', 'CANDLE_CODE',
+                'CANDLE_INT'],
+            suffixes=('_x', '_y')  # добавляем суффиксы для различения одинаковых колонок
+        )
+
+    # === 4. Сохранение данных в файл ===
+    df_data.to_csv(data_path, index=False)
+    print(f"✅ Данные сохранены в файл: '{data_path}' \n")
+    print(df_data)
 
     # === ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
     # Создание фигуры
@@ -375,26 +399,28 @@ for counter in range(1, 2):
 
     # Первый подграфик
     plt.subplot(2, 1, 1)  # (количество строк, количество столбцов, индекс графика)
-    plt.plot(df_val["TRADEDATE"], df_val["CUMULATIVE_RESULT"], label="Cumulative Result",
+    plt.plot(df_val["TRADEDATE"], df_val[f"CUM_{counter}"], label="Cumulative Result",
              color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
     plt.title(f"Валидация Sum RTS. set_seed={counter}, "
-              f"Best accuracy: {best_net_pips}, "
-              f"Epoch best accuracy: {epoch_best}")
+              f"Best pips: {best_net_pips}, "
+              f"Epoch best: {epoch_best}, "
+              f"Final Test Accuracy: {final_accuracy:.2%}")
     plt.legend()
     plt.grid()
     plt.xticks(df_val["TRADEDATE"][::15], rotation=90)
 
     # Второй подграфик
     plt.subplot(2, 1, 2)  # (количество строк, количество столбцов, индекс графика)
-    plt.plot(df_test["TRADEDATE"], df_test["CUMULATIVE_RESULT"], label="Cumulative Result",
+    plt.plot(df_test["TRADEDATE"], df_test[f"CUM_{counter}"], label="Cumulative Result",
              color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
     plt.title(f"Независимый тест Sum RTS. set_seed={counter}, "
-              f"Best accuracy: {best_net_pips}, "
-              f"Epoch best accuracy: {epoch_best}")
+              f"Best net pips: {best_net_pips}, "
+              f"Epoch best: {epoch_best}, "
+              f"Final Test Accuracy: {final_accuracy:.2%}")
     plt.legend()
     plt.grid()
     plt.xticks(df_test["TRADEDATE"][::10], rotation=90)

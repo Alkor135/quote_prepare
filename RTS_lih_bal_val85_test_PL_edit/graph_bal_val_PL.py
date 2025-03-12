@@ -83,6 +83,7 @@ for counter in range(1, 101):
         )
 
     X, y = np.array(X), np.array(y)
+    print(f"{len(X)=}, {len(y)=}")
 
     split = int(0.85 * len(X))
     X_train, y_train = X[:split], y[:split]
@@ -176,7 +177,7 @@ for counter in range(1, 101):
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    best_net_pips = float('-inf')  # Храним лучший критерий profit - loss
+    best_net_pips = float('-inf')  # Храним лучший критерий net pips
     epoch_best = 0
     # model_path = Path("best_model_profit_loss.pth")
     early_stop_epochs = 200
@@ -354,11 +355,11 @@ for counter in range(1, 101):
     # df = pd.read_csv(predictions_file)
 
     split = int(len(df_fut) * 0.85)  # 80% - обучающая выборка, 20% - тестовая
-    df = df_fut.iloc[split:].copy()  # Берем последние 20%
+    df_val = df_fut.iloc[split:].copy()  # Берем последние 20%
 
     # === 3. РАСЧЁТ РЕЗУЛЬТАТОВ ПРОГНОЗА ===
     def calculate_result(row):
-        if pd.isna(row["PREDICTION"]):  # Если NaN после сдвига
+        if pd.isna(row["PREDICTION"]):  # Если NaN 
             return 0  # Можно удалить или оставить 0
 
         true_direction = 1 if row["CLOSE"] > row["OPEN"] else 0
@@ -368,13 +369,13 @@ for counter in range(1, 101):
         return difference if true_direction == predicted_direction else -difference
 
 
-    df["RESULT"] = df.apply(calculate_result, axis=1)
+    df_val["RESULT"] = df_val.apply(calculate_result, axis=1)
 
     # === 4. ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
-    df["CUMULATIVE_RESULT"] = df["RESULT"].cumsum()
+    df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
 
     plt.figure(figsize=(12, 6))
-    plt.plot(df["TRADEDATE"], df["CUMULATIVE_RESULT"], label="Cumulative Result",
+    plt.plot(df_val["TRADEDATE"], df_val["CUMULATIVE_RESULT"], label="Cumulative Result",
              color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
