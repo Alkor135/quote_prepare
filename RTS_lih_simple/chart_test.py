@@ -1,10 +1,12 @@
 """
-Сохранение графика теста на валидационной выборке в файл.
+Сохранение графика теста на независимой тестовой выборке в файл.
 """
 import sqlite3
 import torch
 import torch.nn as nn
+import numpy as np
 import pandas as pd
+import random
 from pathlib import Path
 import matplotlib.pyplot as plt
 import os
@@ -53,7 +55,7 @@ class CandleLSTM(nn.Module):
         x, _ = self.lstm(x)
         x = self.fc(x[:, -1, :])
         return self.sigmoid(x)
-
+    
 
 # === РАСЧЁТ РЕЗУЛЬТАТОВ ПОСЛЕ ПРОГНОЗА ===
 def calculate_result(row):
@@ -80,7 +82,7 @@ for counter in range(1, 101):
             """
             SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
             FROM Day 
-            WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
+            WHERE TRADEDATE >= '2023-01-01' 
             ORDER BY TRADEDATE
             """,
             conn
@@ -117,16 +119,16 @@ for counter in range(1, 101):
     # Заполняем колонку PREDICTION (первые window_size значений - NaN)
     df_fut['PREDICTION'] = [None] * window_size + predictions
 
-    split = int(len(df_fut) * 0.85)  # 85% - обучающая выборка, 15% - тестовая
-    df_val = df_fut.iloc[split:].copy()  # Берем последние 15%
+    # Выбор строк, где TRADEDATE больше 2024-01-01
+    df_test = df_fut[df_fut['TRADEDATE'] > '2024-01-01'].copy()
 
-    df_val["RESULT"] = df_val.apply(calculate_result, axis=1)
+    df_test["RESULT"] = df_test.apply(calculate_result, axis=1)
 
     # === 4. ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
-    df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
+    df_test["CUMULATIVE_RESULT"] = df_test["RESULT"].cumsum()
 
     plt.figure(figsize=(12, 6))
-    plt.plot(df_val["TRADEDATE"], df_val["CUMULATIVE_RESULT"], label="Cumulative Result",
+    plt.plot(df_test["TRADEDATE"], df_test["CUMULATIVE_RESULT"], label="Cumulative Result",
              color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
@@ -134,9 +136,9 @@ for counter in range(1, 101):
     plt.legend()
     plt.grid()
 
-    plt.xticks(df_val["TRADEDATE"][::10], rotation=90)
+    plt.xticks(df_test["TRADEDATE"][::10], rotation=90)
     # Сохранение графика в файл
-    img_path = Path(fr"chart_val\s_{counter}_RTS.png")
+    img_path = Path(fr"chart_test\s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}' \n")
     # plt.show()

@@ -1,5 +1,5 @@
 """
-Сохранение графика теста на валидационной выборке в файл.
+Сохранение 2 графиков (валидационного и тестового) в файл.
 """
 import sqlite3
 import torch
@@ -74,7 +74,7 @@ os.chdir(script_dir)
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
 
 for counter in range(1, 101):
-    # === 2. ЗАГРУЗКА ДАННЫХ ===
+    # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
             """
@@ -122,21 +122,92 @@ for counter in range(1, 101):
 
     df_val["RESULT"] = df_val.apply(calculate_result, axis=1)
 
-    # === 4. ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
+    # === СОЗДАНИЕ КОЛОНКИ КОМУЛЯТИВНОГО РЕЗУЛЬТАТА ===
     df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
 
-    plt.figure(figsize=(12, 6))
-    plt.plot(df_val["TRADEDATE"], df_val["CUMULATIVE_RESULT"], label="Cumulative Result",
+    # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
+    with sqlite3.connect(db_path) as conn:
+        df_fut = pd.read_sql_query(
+            """
+            SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
+            FROM Day 
+            WHERE TRADEDATE >= '2023-01-01' 
+            ORDER BY TRADEDATE
+            """,
+            conn
+        )
+
+    df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
+
+    # === 3. ПРЕОБРАЗОВАНИЕ КОДОВ В ЧИСЛА ===
+    unique_codes = sorted(df_fut['CANDLE_CODE'].unique())
+    code_to_int = {code: i for i, code in enumerate(unique_codes)}
+    df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
+
+    window_size = 20
+
+    # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model_path = Path(fr"model\best_model_{counter}.pth")
+    model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32,
+                       output_dim=1).to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    # === 6. ПРОГНОЗИРОВАНИЕ ===
+    predictions = []
+    with torch.no_grad():
+        for i in range(len(df_fut) - window_size):
+            sequence = torch.tensor(
+                df_fut['CANDLE_INT'].iloc[i:i + window_size].values, dtype=torch.long
+            ).unsqueeze(0).to(device)
+            pred = model(sequence).item()
+            predictions.append(1 if pred > 0.5 else 0)
+
+    # Заполняем колонку PREDICTION (первые window_size значений - NaN)
+    df_fut['PREDICTION'] = [None] * window_size + predictions
+
+    # Выбор строк, где TRADEDATE больше 2024-01-01
+    df_test = df_fut[df_fut['TRADEDATE'] > '2024-01-01'].copy()
+
+    df_test["RESULT"] = df_test.apply(calculate_result, axis=1)
+
+    # === 4. ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
+    df_test["CUMULATIVE_RESULT"] = df_test["RESULT"].cumsum()
+
+    # === СОХРАНЕНИЕ ГРАФИКОВ === -----------------------------------------------------------------
+    # === ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
+    # Создание фигуры
+    # plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(14, 12))
+
+    # Первый подграфик
+    plt.subplot(2, 1, 1)  # (количество строк, количество столбцов, индекс графика)
+    plt.plot(df_val["TRADEDATE"], df_val[f"CUMULATIVE_RESULT"], label="Cumulative Result", 
              color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
-    plt.title(f"Cumulative Sum RTS. set_seed={counter}")
+    plt.title(f"Валидация Sum RTS. set_seed={counter}")
     plt.legend()
     plt.grid()
+    plt.xticks(df_val["TRADEDATE"][::15], rotation=90)
 
-    plt.xticks(df_val["TRADEDATE"][::10], rotation=90)
+    # Второй подграфик
+    plt.subplot(2, 1, 2)  # (количество строк, количество столбцов, индекс графика)
+    plt.plot(df_test["TRADEDATE"], df_test[f"CUMULATIVE_RESULT"], label="Cumulative Result", 
+             color="b")
+    plt.xlabel("Date")
+    plt.ylabel("Cumulative Result")
+    plt.title(f"Независимый тест Sum RTS. set_seed={counter}")
+    plt.legend()
+    plt.grid()
+    plt.xticks(df_test["TRADEDATE"][::10], rotation=90)
+
     # Сохранение графика в файл
-    img_path = Path(fr"chart_val\s_{counter}_RTS.png")
+    plt.tight_layout()
+    img_path = Path(fr"chart_2/s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}' \n")
     # plt.show()
+    

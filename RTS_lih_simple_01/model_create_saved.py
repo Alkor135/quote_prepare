@@ -54,6 +54,40 @@ def encode_candle(row):
     return f"{direction}{upper_code}{lower_code}"
 
 
+# === СОЗДАНИЕ DATASET и DATALOADER ===
+class CandlestickDataset(Dataset):
+    def __init__(self, X, y):
+        self.X = torch.tensor(X, dtype=torch.long)
+        self.y = torch.tensor(y, dtype=torch.float32)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.y[idx]
+    
+
+def seed_worker(worker_id):
+    np.random.seed(42 + worker_id)
+    random.seed(42 + worker_id)
+
+
+# === СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
+class CandleLSTM(nn.Module):
+    def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
+        super(CandleLSTM, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.embedding(x)
+        x, _ = self.lstm(x)
+        x = self.fc(x[:, -1, :])
+        return self.sigmoid(x)
+
+
 # Установка рабочей директории в папку, где находится файл скрипта
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
@@ -143,48 +177,13 @@ for counter in range(1, 101):
     print("Распределение после балансировки:\n", pd.Series(y_train).value_counts())
     # Конец балансировки --------------------------------------------------------------------------
 
-    # === 4. СОЗДАНИЕ DATASET и DATALOADER ===
-    class CandlestickDataset(Dataset):
-        def __init__(self, X, y):
-            self.X = torch.tensor(X, dtype=torch.long)
-            self.y = torch.tensor(y, dtype=torch.float32)
-
-        def __len__(self):
-            return len(self.X)
-
-        def __getitem__(self, idx):
-            return self.X[idx], self.y[idx]
-        
-
-    def seed_worker(worker_id):
-        np.random.seed(42 + worker_id)
-        random.seed(42 + worker_id)
-
-
     train_dataset = CandlestickDataset(X_train, y_train)
     test_dataset = CandlestickDataset(X_test, y_test)
 
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
 
-    
-    # === 5. СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
-    class CandleLSTM(nn.Module):
-        def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
-            super(CandleLSTM, self).__init__()
-            self.embedding = nn.Embedding(vocab_size, embedding_dim)
-            self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
-            self.fc = nn.Linear(hidden_dim, output_dim)
-            self.sigmoid = nn.Sigmoid()
-
-        def forward(self, x):
-            x = self.embedding(x)
-            x, _ = self.lstm(x)
-            x = self.fc(x[:, -1, :])
-            return self.sigmoid(x)
-        
-
-    # === 6. ОБУЧЕНИЕ МОДЕЛИ С СОХРАНЕНИЕМ ЛУЧШЕЙ ===
+    # === ОБУЧЕНИЕ МОДЕЛИ С СОХРАНЕНИЕМ ЛУЧШЕЙ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32,
@@ -192,8 +191,8 @@ for counter in range(1, 101):
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    best_accuracy = 0
-    epoch_best_accuracy = 0
+    best_net_pips = float('-inf')  # Храним лучший критерий net pips
+    epoch_best = 0
     model_path = Path(fr"model\best_model_{counter}.pth")
     early_stop_epochs = 200
     epochs_no_improve = 0
@@ -211,40 +210,61 @@ for counter in range(1, 101):
             optimizer.step()
             total_loss += loss.item()
 
-        # === Проверка на тесте после каждой эпохи ===
+        # === Оценка модели по критерию net pips на тестовой выборке после каждой эпохи ===
         model.eval()
-        correct = 0
-        total = 0
-        with torch.no_grad():
-            for X_batch, y_batch in test_loader:
-                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-                y_pred = model(X_batch).squeeze().round()
-                correct += (y_pred == y_batch).sum().item()
-                total += y_batch.size(0)
+        total_profit = 0
+        total_loss_pips = 0
 
-        accuracy = correct / total
+        with torch.no_grad():
+            batch_start = split  # Начало тестовой выборки
+            for batch_idx, (X_batch, _) in enumerate(test_loader):
+                X_batch = X_batch.to(device)
+                y_pred = model(X_batch).squeeze().round()
+
+                # Рассчитываем индексы для текущего батча
+                batch_indices = range(batch_start + batch_idx * len(y_pred),
+                                      batch_start + (batch_idx + 1) * len(y_pred))
+
+                for i, idx in enumerate(batch_indices):
+                    if idx + window_size + predict_offset < len(df_fut):
+                        open_price = df_fut.iloc[idx + window_size + predict_offset]['OPEN']
+                        close_price = df_fut.iloc[idx + window_size + predict_offset]['CLOSE']
+
+                        if y_pred[i] == 1:  # Прогноз роста
+                            if close_price > open_price:
+                                total_profit += close_price - open_price  # Профит
+                            else:
+                                total_loss_pips += open_price - close_price  # Убыток
+                        else:  # Прогноз падения
+                            if close_price < open_price:
+                                total_profit += open_price - close_price  # Профит
+                            else:
+                                total_loss_pips += close_price - open_price  # Убыток
+
+        net_pips = total_profit - total_loss_pips
+
         print(
             f"Epoch {epoch + 1}/{epochs}, "
             f"Loss: {total_loss / len(train_loader):.4f}, "
-            f"Test Accuracy: {accuracy:.2%}, "
-            f"Best accuracy: {best_accuracy:.2%}, "
-            f"Epoch best accuracy: {epoch_best_accuracy}, "
+            f"Net Pips: {int(net_pips)}, "
+            f"Best net pips: {best_net_pips}, "
+            f"Epoch best pips: {epoch_best}, "
             f"seed: {counter}"
         )
 
-        # === Сохранение лучшей модели ===
-        if accuracy > best_accuracy:
-            best_accuracy = accuracy
+        # === Сохранение лучшей модели по net_pips ===
+        if net_pips > best_net_pips:
+            best_net_pips = net_pips
             epochs_no_improve = 0
-            epoch_best_accuracy = epoch + 1
+            epoch_best = epoch + 1
             torch.save(model.state_dict(), model_path)
-            print(f"✅ Model saved with accuracy: {best_accuracy:.2%}")
+            print(f"✅ Model saved with Net Pips: {int(best_net_pips)}")
         else:
             epochs_no_improve += 1
 
         # === Ранняя остановка ===
         if epochs_no_improve >= early_stop_epochs:
-            print(f"🛑 Early stopping at epoch {epoch + 1}")
+            print(f"🛑 Ранняя остановка на эпохе {epoch + 1}")
             break
 
     # === 7. ЗАГРУЗКА ЛУЧШЕЙ МОДЕЛИ И ТЕСТ ===
