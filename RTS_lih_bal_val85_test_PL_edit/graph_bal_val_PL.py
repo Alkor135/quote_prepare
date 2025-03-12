@@ -74,6 +74,7 @@ for counter in range(1, 101):
     window_size = 20
     predict_offset = 1
 
+    # Создание входных последовательностей
     X, y = [], []
     for i in range(len(df_fut) - window_size - predict_offset):
         X.append(df_fut['CANDLE_INT'].iloc[i:i + window_size].values)
@@ -85,6 +86,7 @@ for counter in range(1, 101):
     X, y = np.array(X), np.array(y)
     print(f"{len(X)=}, {len(y)=}")
 
+    # Разделение на train/test
     split = int(0.85 * len(X))
     X_train, y_train = X[:split], y[:split]
     X_test, y_test = X[split:], y[split:]
