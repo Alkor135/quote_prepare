@@ -386,7 +386,7 @@ for counter in range(1, 101):
     plt.legend()
     plt.grid()
 
-    plt.xticks(df["TRADEDATE"][::10], rotation=90)
+    plt.xticks(df_val["TRADEDATE"][::10], rotation=90)
     # Сохранение графика в файл
     img_path = Path(fr"img_RTS_net_pips_val\s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
