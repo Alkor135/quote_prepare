@@ -1,5 +1,5 @@
 """
-Создание графика агрегированных данных по сумме P/L от 2 моделей.
+Создание графика агрегированных данных от 2 моделей.
 """
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -31,9 +31,9 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-# [51, 91] 93, 51, 91, 30, 54
+# [24, 51]
 first_model = 51
-second_model = 91
+second_model = 24
 
 # === ЗАГРУЗКА ФАЙЛА ===
 df = pd.read_csv(r"pred_res_cum.csv")
@@ -53,8 +53,8 @@ sum_positive = df[df['RESULT'] > 0]['RESULT'].sum()
 sum_negative = df[df['RESULT'] < 0]['RESULT'].sum()
 
 # Подсчет количества значений, равных 1.0, в колонках PRED_51 и PRED_91
-count_1 = ((df['PRED_51'] == 1.0) & (df['PRED_91'] == 1.0)).sum()
-count_0 = ((df['PRED_51'] == 0.0) & (df['PRED_91'] == 0.0)).sum()
+count_1 = ((df[f'PRED_{first_model}'] == 1.0) & (df[f'PRED_{second_model}'] == 1.0)).sum()
+count_0 = ((df[f'PRED_{first_model}'] == 0.0) & (df[f'PRED_{second_model}'] == 0.0)).sum()
 
 print(f"Количество значений равных 0.0: {count_zeros}")
 print(f"Количество положительных значений: {num_positive}")
@@ -94,8 +94,6 @@ elif current_series_type == 'negative':
     series_counts['negative'][current_series_length] = series_counts['negative'].get(current_series_length, 0) + 1
 
 # Сортировка словаря по ключам
-# sorted_dict = dict(sorted(my_dict.items()))
-# series_counts = {'positive': {}, 'negative': {}}
 series_counts = {
     'positive': dict(sorted(series_counts['positive'].items())),
     'negative': dict(sorted(series_counts['negative'].items()))
