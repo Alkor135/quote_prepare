@@ -132,7 +132,8 @@ for column in df.columns:
     })
 
 # Вывод отсортированного списка моделей по композитному индексу
-df_results = pd.DataFrame(results).sort_values(by="Composite Index", ascending=False)
+# df_results = pd.DataFrame(results).sort_values(by="Composite Index", ascending=False)
+df_results = pd.DataFrame(results).sort_values(by="Max Profit", ascending=False)
 
 df_results = df_results.round(4).fillna("-")
 
