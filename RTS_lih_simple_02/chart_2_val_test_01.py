@@ -78,7 +78,7 @@ with open("code_full_int.json", "r") as f:
 
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
 
-for counter in range(1, 101):
+for counter in range(1, 3):
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
@@ -106,7 +106,7 @@ for counter in range(1, 101):
     model_path = Path(fr"model_01\best_model_{counter}.pth")
     # model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32,
     #                    output_dim=1).to(device)
-    model = CandleLSTM(vocab_size=27, embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
+    model = CandleLSTM(vocab_size=27, embedding_dim=16, hidden_dim=64, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
@@ -213,7 +213,7 @@ for counter in range(1, 101):
 
     # Сохранение графика в файл
     plt.tight_layout()
-    img_path = Path(fr"chart_2/s_{counter}_RTS.png")
+    img_path = Path(fr"chart_2_01/s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}' \n")
     # plt.show()
