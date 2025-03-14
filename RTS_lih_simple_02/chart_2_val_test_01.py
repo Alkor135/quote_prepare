@@ -103,7 +103,7 @@ for counter in range(1, 101):
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = Path(fr"model\best_model_{counter}.pth")
+    model_path = Path(fr"model_01\best_model_{counter}.pth")
     # model = CandleLSTM(vocab_size=len(unique_codes), embedding_dim=8, hidden_dim=32,
     #                    output_dim=1).to(device)
     model = CandleLSTM(vocab_size=27, embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
