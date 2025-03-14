@@ -78,7 +78,7 @@ with open("code_full_int.json", "r") as f:
 
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
 
-for counter in range(1, 3):
+for counter in range(1, 101):
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
