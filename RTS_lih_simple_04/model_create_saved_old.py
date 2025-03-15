@@ -83,18 +83,6 @@ def encode_candle(row):
 
     return f"{direction}{upper_code}{lower_code}"
 
-
-# === Функция расчета P/L (по предсказанному направлению) ===
-def calculate_pnl(y_preds, open_prices, close_prices):
-    pnl = 0
-    for i in range(len(y_preds)):
-        if y_preds[i] > 0.5:  # Покупка (LONG)
-            pnl += close_prices[i] - open_prices[i]
-        else:  # Продажа (SHORT)
-            pnl += open_prices[i] - close_prices[i]
-    return pnl  # Итоговая прибыль
-
-
 # === 1. ОПРЕДЕЛЕНИЯ ===
 # Установка рабочей директории в папку, где находится файл скрипта
 script_dir = Path(__file__).parent
@@ -106,7 +94,7 @@ with open("code_full_int.json", "r") as f:
 
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
 
-for counter in range(101, 201):
+for counter in range(1, 101):
     set_seed(counter)  # Устанавливаем одинаковый seed
 
     # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
@@ -201,7 +189,7 @@ for counter in range(101, 201):
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
 
-    # === 6. ОБУЧЕНИЕ МОДЕЛИ С ОПТИМИЗАЦИЕЙ ПО P/L ===
+    # === 6. ОБУЧЕНИЕ МОДЕЛИ С СОХРАНЕНИЕМ ЛУЧШЕЙ ПО P/L ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = CandleLSTM(vocab_size=27, embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
@@ -215,6 +203,17 @@ for counter in range(101, 201):
     epochs_no_improve = 0
 
     epochs = 2000
+
+    # === Функция расчета P/L (по OPEN и CLOSE) ===
+    def calculate_pnl(y_pred, y_true, open_prices, close_prices):
+        pnl = 0
+        for i in range(len(y_pred)):
+            if y_pred[i] > 0.5:  # Покупка (LONG)
+                pnl += close_prices[i] - open_prices[i]
+            else:  # Продажа (SHORT)
+                pnl += open_prices[i] - close_prices[i]
+        return pnl  # Итоговая прибыль
+
     for epoch in range(epochs):
         model.train()
         total_loss = 0
@@ -229,18 +228,19 @@ for counter in range(101, 201):
 
         # === Проверка на тесте после каждой эпохи ===
         model.eval()
-        y_preds = []
+        y_preds, y_trues = [], []
         
         with torch.no_grad():
-            for X_batch, _ in test_loader:
-                X_batch = X_batch.to(device)
+            for X_batch, y_batch in test_loader:
+                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                 y_pred = model(X_batch).squeeze().cpu().numpy()
                 y_preds.extend(y_pred)
+                y_trues.extend(y_batch.cpu().numpy())
 
         # === Расчет P/L ===
         test_open_prices = df_fut['OPEN'].iloc[split:].values
         test_close_prices = df_fut['CLOSE'].iloc[split:].values
-        pnl = calculate_pnl(y_preds, test_open_prices, test_close_prices)
+        pnl = calculate_pnl(y_preds, y_trues, test_open_prices, test_close_prices)
 
         print(
             f"Epoch {epoch + 1}/{epochs}, "
@@ -271,12 +271,13 @@ for counter in range(101, 201):
     model.load_state_dict(torch.load(model_path))
     model.eval()
 
-    y_preds_final = []
+    y_preds_final, y_trues_final = [], []
     with torch.no_grad():
-        for X_batch, _ in test_loader:
-            X_batch = X_batch.to(device)
+        for X_batch, y_batch in test_loader:
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
             y_pred = model(X_batch).squeeze().cpu().numpy()
             y_preds_final.extend(y_pred)
+            y_trues_final.extend(y_batch.cpu().numpy())
 
-    final_pnl = calculate_pnl(y_preds_final, test_open_prices, test_close_prices)
+    final_pnl = calculate_pnl(y_preds_final, y_trues_final, test_open_prices, test_close_prices)
     print(f"🏆 Final Test P/L: {final_pnl:.2f}")
