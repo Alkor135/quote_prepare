@@ -148,7 +148,7 @@ for counter in range(101, 201):
     X_train, y_train = X[:split], y[:split]
     X_test, y_test = X[split:], y[split:]
 
-    # === 4. Балансировка классов === ----------------------------------------------------------------
+    # === 4. Балансировка классов === -------------------------------------------------------------
     # Объединяем X_train и y_train в один DataFrame
     df_train = pd.DataFrame(X_train)
     df_train['TARGET'] = y_train  # Добавляем колонку с целевой меткой
