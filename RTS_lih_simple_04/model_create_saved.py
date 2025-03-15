@@ -189,20 +189,31 @@ for counter in range(1, 101):
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
 
-    # === 6. ОБУЧЕНИЕ МОДЕЛИ С СОХРАНЕНИЕМ ЛУЧШЕЙ ===
+    # === 6. ОБУЧЕНИЕ МОДЕЛИ С СОХРАНЕНИЕМ ЛУЧШЕЙ ПО P/L ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = CandleLSTM(vocab_size=27, embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    best_accuracy = 0
-    epoch_best_accuracy = 0
+    best_pnl = float('-inf')  # Лучшая прибыль (изначально -∞)
+    epoch_best_pnl = 0
     model_path = Path(fr"model\best_model_{counter}.pth")
     early_stop_epochs = 200
     epochs_no_improve = 0
 
     epochs = 2000
+
+    # === Функция расчета P/L (по OPEN и CLOSE) ===
+    def calculate_pnl(y_pred, y_true, open_prices, close_prices):
+        pnl = 0
+        for i in range(len(y_pred)):
+            if y_pred[i] > 0.5:  # Покупка (LONG)
+                pnl += close_prices[i] - open_prices[i]
+            else:  # Продажа (SHORT)
+                pnl += open_prices[i] - close_prices[i]
+        return pnl  # Итоговая прибыль
+
     for epoch in range(epochs):
         model.train()
         total_loss = 0
@@ -217,32 +228,36 @@ for counter in range(1, 101):
 
         # === Проверка на тесте после каждой эпохи ===
         model.eval()
-        correct = 0
-        total = 0
+        y_preds, y_trues = [], []
+        
         with torch.no_grad():
             for X_batch, y_batch in test_loader:
                 X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-                y_pred = model(X_batch).squeeze().round()
-                correct += (y_pred == y_batch).sum().item()
-                total += y_batch.size(0)
+                y_pred = model(X_batch).squeeze().cpu().numpy()
+                y_preds.extend(y_pred)
+                y_trues.extend(y_batch.cpu().numpy())
 
-        accuracy = correct / total
+        # === Расчет P/L ===
+        test_open_prices = df_fut['OPEN'].iloc[split:].values
+        test_close_prices = df_fut['CLOSE'].iloc[split:].values
+        pnl = calculate_pnl(y_preds, y_trues, test_open_prices, test_close_prices)
+
         print(
             f"Epoch {epoch + 1}/{epochs}, "
             f"Loss: {total_loss / len(train_loader):.4f}, "
-            f"Test Accuracy: {accuracy:.2%}, "
-            f"Best accuracy: {best_accuracy:.2%}, "
-            f"Epoch best accuracy: {epoch_best_accuracy}, "
+            f"P/L: {pnl:.5f}, "
+            f"Best P/L: {best_pnl:.5f}, "
+            f"Epoch best P/L: {epoch_best_pnl}, "
             f"seed: {counter}"
         )
 
-        # === Сохранение лучшей модели ===
-        if accuracy > best_accuracy:
-            best_accuracy = accuracy
+        # === Сохранение лучшей модели по P/L ===
+        if pnl > best_pnl:
+            best_pnl = pnl
             epochs_no_improve = 0
-            epoch_best_accuracy = epoch + 1
+            epoch_best_pnl = epoch + 1
             torch.save(model.state_dict(), model_path)
-            print(f"✅ Model saved with accuracy: {best_accuracy:.2%}")
+            print(f"✅ Model saved with P/L: {best_pnl:.5f}")
         else:
             epochs_no_improve += 1
 
@@ -251,19 +266,18 @@ for counter in range(1, 101):
             print(f"🛑 Early stopping at epoch {epoch + 1}")
             break
 
-    # === 7. ЗАГРУЗКА ЛУЧШЕЙ МОДЕЛИ И ТЕСТ ===
+    # === 7. ЗАГРУЗКА ЛУЧШЕЙ МОДЕЛИ И ФИНАЛЬНЫЙ ТЕСТ ===
     print("\n🔹 Loading best model for final evaluation...")
     model.load_state_dict(torch.load(model_path))
     model.eval()
 
-    correct = 0
-    total = 0
+    y_preds_final, y_trues_final = [], []
     with torch.no_grad():
         for X_batch, y_batch in test_loader:
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-            y_pred = model(X_batch).squeeze().round()
-            correct += (y_pred == y_batch).sum().item()
-            total += y_batch.size(0)
+            y_pred = model(X_batch).squeeze().cpu().numpy()
+            y_preds_final.extend(y_pred)
+            y_trues_final.extend(y_batch.cpu().numpy())
 
-    final_accuracy = correct / total
-    print(f"🏆 Final Test Accuracy: {final_accuracy:.2%}")
+    final_pnl = calculate_pnl(y_preds_final, y_trues_final, test_open_prices, test_close_prices)
+    print(f"🏆 Final Test P/L: {final_pnl:.5f}")
