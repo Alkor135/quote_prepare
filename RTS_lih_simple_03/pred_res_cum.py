@@ -90,7 +90,7 @@ db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
 data_path = Path(fr"pred_res_cum.csv")
 df_data = pd.DataFrame()
 
-for counter in range(1, 201):
+for counter in range(1, 101):
     # ---------------------------------------------------------------------------------------------
     # === 1. ЗАГРУЗКА ДАННЫХ ===
     with sqlite3.connect(db_path) as conn:
