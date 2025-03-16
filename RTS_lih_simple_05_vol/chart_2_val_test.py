@@ -10,49 +10,36 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import json
 import os
+# Импортируем кодировку свечей
+from data_processing import encode_candle
 
 
-# === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
-def encode_candle(row):
-    open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
-
-    if close > open_:
-        direction = 1  # Бычья свеча
-    elif close < open_:
-        direction = 0  # Медвежья свеча
-    else:
-        direction = 2  # Дожи
-
-    upper_shadow = high - max(open_, close)
-    lower_shadow = min(open_, close) - low
-    body = abs(close - open_)
-
-    def classify_shadow(shadow, body):
-        if shadow < 0.1 * body:
-            return 0  
-        elif shadow < 0.5 * body:
-            return 1  
-        else:
-            return 2  
-
-    upper_code = classify_shadow(upper_shadow, body)
-    lower_code = classify_shadow(lower_shadow, body)
-
-    return f"{direction}{upper_code}{lower_code}"
-
-
-# === ОПРЕДЕЛЕНИЕ МОДЕЛИ (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
+# === ОПРЕДЕЛЕНИЕ МОДЕЛИ LSTM (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
 class CandleLSTM(nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
         super(CandleLSTM, self).__init__()
+
+        # Embedding слой для кодов свечей
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
+
+        # LSTM принимает объединенные фичи (embedding + volume)
+        self.lstm = nn.LSTM(embedding_dim + 1, hidden_dim, batch_first=True)
+
+        # Полносвязный слой для предсказания
         self.fc = nn.Linear(hidden_dim, output_dim)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
-        x = self.embedding(x)
+    def forward(self, x_candle, x_volume):
+        # Преобразуем коды свечей в embedding
+        x_candle = self.embedding(x_candle)
+
+        # Объединяем свечи и объем (по оси признаков)
+        x = torch.cat((x_candle, x_volume.unsqueeze(-1)), dim=-1)
+
+        # Пропускаем через LSTM
         x, _ = self.lstm(x)
+
+        # Полносвязный слой и сигмоида
         x = self.fc(x[:, -1, :])
         return self.sigmoid(x)
 
@@ -105,6 +92,10 @@ for counter in range(101, 201):
     # Создание колонок с признаками
     for i in range(1, 21):
         df_fut[f'CI_{i}'] = df_fut['CANDLE_INT'].shift(i).astype('Int64')
+    
+    # Создание колонок с объемом за 20 предыдущих свечей
+    for i in range(1, 21):
+        df_fut[f'VOL_{i}'] = df_fut['VOLUME'].shift(i).astype('Int64')
 
     df_fut = df_fut.dropna().reset_index(drop=True)
 
@@ -169,6 +160,10 @@ for counter in range(101, 201):
     for i in range(1, 21):
         df_fut[f'CI_{i}'] = df_fut['CANDLE_INT'].shift(i).astype('Int64')
 
+    # Создание колонок с объемом за 20 предыдущих свечей
+    for i in range(1, 21):
+        df_fut[f'VOL_{i}'] = df_fut['VOLUME'].shift(i).astype('Int64')
+
     df_fut = df_fut.dropna().reset_index(drop=True)
 
     # Создание дата фрейма с фичами и таргетом
@@ -210,7 +205,6 @@ for counter in range(101, 201):
     # === СОХРАНЕНИЕ ГРАФИКОВ === -----------------------------------------------------------------
     # === ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
     # Создание фигуры
-    # plt.figure(figsize=(10, 8))
     plt.figure(figsize=(14, 12))
 
     # Первый подграфик

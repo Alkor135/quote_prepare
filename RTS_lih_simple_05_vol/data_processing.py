@@ -2,6 +2,7 @@ import pandas as pd
 from sklearn.utils import resample
 import numpy as np
 
+
 def balance_classes(X_candle, X_volume, y):
     """
     Функция для балансировки классов методом Oversampling.
@@ -92,3 +93,13 @@ def encode_candle(row):
     lower_code = classify_shadow(lower_shadow, body)
 
     return f"{direction}{upper_code}{lower_code}"
+
+# === Функция расчета P/L (по предсказанному направлению) ===
+def calculate_pnl(y_preds, open_prices, close_prices):
+    pnl = 0
+    for i in range(len(y_preds)):
+        if y_preds[i] > 0.5:  # Покупка (LONG)
+            pnl += close_prices[i] - open_prices[i]
+        else:  # Продажа (SHORT)
+            pnl += open_prices[i] - close_prices[i]
+    return pnl  # Итоговая прибыль

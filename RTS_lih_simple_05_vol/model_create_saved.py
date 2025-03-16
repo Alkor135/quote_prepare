@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 import json
 import os
 # Импортируем балансировку и кодировку свечей
-from data_processing import balance_classes, encode_candle
+from data_processing import balance_classes, encode_candle, calculate_pnl
 
 # === СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
 class CandleLSTM(nn.Module):
@@ -67,17 +67,6 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-# === Функция расчета P/L (по предсказанному направлению) ===
-def calculate_pnl(y_preds, open_prices, close_prices):
-    pnl = 0
-    for i in range(len(y_preds)):
-        if y_preds[i] > 0.5:  # Покупка (LONG)
-            pnl += close_prices[i] - open_prices[i]
-        else:  # Продажа (SHORT)
-            pnl += open_prices[i] - close_prices[i]
-    return pnl  # Итоговая прибыль
-
-
 # === 1. ОПРЕДЕЛЕНИЯ ===
 # Установка рабочей директории в папку, где находится файл скрипта
 script_dir = Path(__file__).parent
@@ -89,7 +78,7 @@ with open("code_full_int.json", "r") as f:
 
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
 
-for counter in range(101, 201):
+for counter in range(1, 101):
     set_seed(counter)  # Устанавливаем одинаковый seed
 
     # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
@@ -132,7 +121,10 @@ for counter in range(101, 201):
 
     # Нормализация объема
     scaler = StandardScaler()
-    X_volume = scaler.fit_transform(X_volume)
+    # # Нормализация относительно всего дата-сета
+    # X_volume = scaler.fit_transform(X_volume)
+    # Нормализация по окну из 20 значений.
+    X_volume = np.array([scaler.fit_transform(row.reshape(-1, 1)).flatten() for row in X_volume])
 
     # Разделение на train/test
     split = int(0.85 * len(y))
