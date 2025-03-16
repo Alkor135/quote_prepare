@@ -127,12 +127,17 @@ for counter in range(1, 101):
     with torch.no_grad():
         predictions = model(X_candle_tensor, X_volume_tensor).cpu().numpy()
 
-    df_fut['PREDICTION'] = (predictions > 0.5).astype(int)
+    # df_fut['PREDICTION'] = (predictions > 0.5).astype(int)
+    # 75% вероятность
+    # df_fut['PREDICTION'] = np.where(predictions > 0.75, (predictions > 0.5).astype(int), np.nan)
+    df_fut['PREDICTION'] = np.where(predictions > 0.75, 1, 
+                                np.where(predictions < 0.25, 0, np.nan))
 
     # === РАЗДЕЛЕНИЕ НА ВАЛИДАЦИЮ ===
     split = int(len(df_fut) * 0.85)
     df_val = df_fut.iloc[split:].copy()
     df_val["RESULT"] = df_val.apply(calculate_result, axis=1)
+    df_val["RESULT"] = df_val["RESULT"].fillna(0)
     df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
 
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
@@ -194,11 +199,16 @@ for counter in range(1, 101):
     with torch.no_grad():
         predictions = model(X_candle_tensor, X_volume_tensor).cpu().numpy()
 
-    df_fut['PREDICTION'] = (predictions > 0.5).astype(int)
+    # df_fut['PREDICTION'] = (predictions > 0.5).astype(int)
+    # 75% вероятность
+    # df_fut['PREDICTION'] = np.where(predictions > 0.5, (predictions > 0.5).astype(int), np.nan)
+    df_fut['PREDICTION'] = np.where(predictions > 0.75, 1, 
+                                np.where(predictions < 0.25, 0, np.nan))
 
     # === РАЗДЕЛЕНИЕ НА ТЕСТ где TRADEDATE больше 2024-01-01 ===
     df_test = df_fut[df_fut['TRADEDATE'] > '2024-01-01'].copy()
     df_test["RESULT"] = df_test.apply(calculate_result, axis=1)
+    df_test["RESULT"] = df_test["RESULT"].fillna(0)
     df_test["CUMULATIVE_RESULT"] = df_test["RESULT"].cumsum()
 
     # === СОХРАНЕНИЕ ГРАФИКОВ === -----------------------------------------------------------------
@@ -230,7 +240,7 @@ for counter in range(1, 101):
 
     # Сохранение графика в файл
     plt.tight_layout()
-    img_path = Path(fr"chart_2/s_{counter}_RTS.png")
+    img_path = Path(fr"chart_2_75/s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}'. Шаг: {counter}")
     # plt.show()
