@@ -8,30 +8,35 @@ import random
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 import os
+
 # Импортируем балансировку и кодировку свечей
 from data_processing import balance_classes, data_prepare, calculate_pnl
 
-# === СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
+# === 1. СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
 class CandleLSTM(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
+    def __init__(self, vocab_size, embedding_dim, day_vocab_size, day_embedding_dim, hidden_dim, output_dim):
         super(CandleLSTM, self).__init__()
 
         # Embedding слой для кодов свечей
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.embedding_candle = nn.Embedding(vocab_size, embedding_dim)
+        
+        # Embedding слой для дня недели
+        self.embedding_day = nn.Embedding(day_vocab_size, day_embedding_dim)
 
-        # LSTM принимает объединенные фичи (embedding + volume)
-        self.lstm = nn.LSTM(embedding_dim + 1, hidden_dim, batch_first=True)
+        # LSTM принимает объединенные фичи (embedding свечей + объем + embedding дня недели)
+        self.lstm = nn.LSTM(embedding_dim + 1 + day_embedding_dim, hidden_dim, batch_first=True)
 
         # Полносвязный слой для предсказания
         self.fc = nn.Linear(hidden_dim, output_dim)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x_candle, x_volume):
-        # Преобразуем коды свечей в embedding
-        x_candle = self.embedding(x_candle)
+    def forward(self, x_candle, x_volume, x_day):
+        # Преобразуем коды свечей и день недели в embeddings
+        x_candle = self.embedding_candle(x_candle)
+        x_day = self.embedding_day(x_day)
 
-        # Объединяем свечи и объем (по оси признаков)
-        x = torch.cat((x_candle, x_volume.unsqueeze(-1)), dim=-1)
+        # Объединяем свечи, объем и день недели
+        x = torch.cat((x_candle, x_volume.unsqueeze(-1), x_day), dim=-1)
 
         # Пропускаем через LSTM
         x, _ = self.lstm(x)
@@ -40,23 +45,21 @@ class CandleLSTM(nn.Module):
         x = self.fc(x[:, -1, :])
         return self.sigmoid(x)
 
+# === 2. СОЗДАНИЕ DATASET ===
 class CandlestickDataset(Dataset):
-    def __init__(self, X_candle, X_volume, y):
+    def __init__(self, X_candle, X_volume, X_day, y):
         self.X_candle = torch.tensor(X_candle, dtype=torch.long)
         self.X_volume = torch.tensor(X_volume, dtype=torch.float32)
+        self.X_day = torch.tensor(X_day, dtype=torch.long)  # Дни недели как long (категориальные)
         self.y = torch.tensor(y, dtype=torch.float32)
 
     def __len__(self):
-        return len(self.X_candle)  # ✅ Исправлено
+        return len(self.X_candle)
 
     def __getitem__(self, idx):
-        return self.X_candle[idx], self.X_volume[idx], self.y[idx]
-    
-def seed_worker(worker_id):
-    np.random.seed(42 + worker_id)
-    random.seed(42 + worker_id)
+        return self.X_candle[idx], self.X_volume[idx], self.X_day[idx], self.y[idx]
 
-# === ФИКСАЦИЯ СЛУЧАЙНЫХ ЧИСЕЛ ДЛЯ ДЕТЕРМИНИРОВАННОСТИ ===
+# === 3. ФИКСАЦИЯ СЛУЧАЙНЫХ ЧИСЕЛ ДЛЯ ДЕТЕРМИНИРОВАННОСТИ ===
 def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
@@ -65,17 +68,16 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-# === 1. ОПРЕДЕЛЕНИЯ ===
+# === 4. ЗАГРУЗКА ДАННЫХ ===
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
+
 # Установка рабочей директории в папку, где находится файл скрипта
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
-
 for counter in range(1, 101):
-    set_seed(counter)  # Устанавливаем одинаковый seed
+    set_seed(counter)
 
-    # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
             """
@@ -94,44 +96,33 @@ for counter in range(1, 101):
     X_volume = df_fut[[f'VOL_{i}' for i in range(1, 21)]].values
     X_day = df_fut[[f'DAY_W_{i}' for i in range(1, 21)]].values
     y = df_fut['DIRECTION']
-    X_candle, X_volume, X_day, y = np.array(X_candle), np.array(X_volume), np.array(X_day), np.array(y)
+    
+    X_candle, X_volume, X_day, y = map(np.array, [X_candle, X_volume, X_day, y])
 
     # Разделение на train/test
     split = int(0.85 * len(y))
-    X_train_candle, X_train_volume, y_train = X_candle[:split], X_volume[:split], y[:split]
-    X_train_day = X_day[:split]
-    X_test_candle, X_test_volume, y_test = X_candle[split:], X_volume[split:], y[split:]
-    X_test_day = X_day[split:]
+    X_train_candle, X_train_volume, X_train_day, y_train = X_candle[:split], X_volume[:split], X_day[:split], y[:split]
+    # X_train_candle, X_train_volume, X_train_day, y_train = map(lambda x: x[:split], [X_candle, X_volume, X_day, y])
+    X_test_candle, X_test_volume, X_test_day, y_test = X_candle[split:], X_volume[split:], X_day[split:], y[split:]
 
-    # === 4. Балансировка классов ===
-    X_train_candle, X_train_volume, X_train_day, y_train = balance_classes(
-        X_train_candle, X_train_volume, X_train_day, y_train
-        )
+    # Балансировка классов
+    X_train_candle, X_train_volume, X_train_day, y_train = balance_classes(X_train_candle, X_train_volume, X_train_day, y_train)
 
-    # === 5. СОЗДАНИЕ DATASET и DATALOADER ===
-    X_train_candle = np.array(X_train_candle, dtype=np.int64)  # Привести к числовому типу
-    X_train_volume = np.array(X_train_volume, dtype=np.float32)  # Привести к числовому типу
-    X_train_day = np.array(X_train_day, dtype=np.float32)  # Привести к числовому типу
-    y_train = np.array(y_train, dtype=np.int64)  # Привести к числовому типу
-    X_test_candle = np.array(X_test_candle, dtype=np.int64)  # Привести к числовому типу
-    X_test_volume = np.array(X_test_volume, dtype=np.float32)  # Привести к числовому типу
-    X_test_day = np.array(X_test_day, dtype=np.float32)  # Привести к числовому типу
-    y_test = np.array(y_test, dtype=np.int64)  # Привести к числовому типу
-
+    # Создание dataset и data loader
     train_dataset = CandlestickDataset(X_train_candle, X_train_volume, X_train_day, y_train)
     test_dataset = CandlestickDataset(X_test_candle, X_test_volume, X_test_day, y_test)
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
-    # === 6. ОБУЧЕНИЕ МОДЕЛИ С ОПТИМИЗАЦИЕЙ ПО P/L ===
+    # === 5. ОБУЧЕНИЕ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = CandleLSTM(vocab_size=27, embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
+    model = CandleLSTM(vocab_size=27, embedding_dim=8, day_vocab_size=7, day_embedding_dim=4, hidden_dim=32, output_dim=1).to(device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    best_pnl = float('-inf')  # Лучшая прибыль (изначально -∞)
+    best_pnl = float('-inf')
     epoch_best_pnl = 0
     model_path = Path(fr"model\best_model_{counter}.pth")
     early_stop_epochs = 200
@@ -141,28 +132,28 @@ for counter in range(1, 101):
     for epoch in range(epochs):
         model.train()
         total_loss = 0
-        for X_candle_batch, X_volume_batch, y_batch in train_loader:
-            X_candle_batch, X_volume_batch, y_batch = (
+        for X_candle_batch, X_volume_batch, X_day_batch, y_batch in train_loader:
+            X_candle_batch, X_volume_batch, X_day_batch, y_batch = (
                 X_candle_batch.to(device),
                 X_volume_batch.to(device),
+                X_day_batch.to(device),
                 y_batch.to(device)
             )
 
             optimizer.zero_grad()
-            y_pred = model(X_candle_batch, X_volume_batch).squeeze()
+            y_pred = model(X_candle_batch, X_volume_batch, X_day_batch).squeeze()
             loss = criterion(y_pred, y_batch)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
 
-        # === Проверка на тесте после каждой эпохи ===
+        # === Проверка на тесте ===
         model.eval()
         y_preds = []
-
         with torch.no_grad():
-            for X_candle_batch, X_volume_batch, _ in test_loader:
-                X_candle_batch, X_volume_batch = X_candle_batch.to(device), X_volume_batch.to(device)
-                y_pred = model(X_candle_batch, X_volume_batch).squeeze().cpu().numpy()
+            for X_candle_batch, X_volume_batch, X_day_batch, _ in test_loader:
+                X_candle_batch, X_volume_batch, X_day_batch = X_candle_batch.to(device), X_volume_batch.to(device), X_day_batch.to(device)
+                y_pred = model(X_candle_batch, X_volume_batch, X_day_batch).squeeze().cpu().numpy()
                 y_preds.extend(y_pred)
 
         # === Расчет P/L ===
@@ -177,9 +168,8 @@ for counter in range(1, 101):
             f"Best P/L: {best_pnl:.2f}, "
             f"Epoch best P/L: {epoch_best_pnl}, "
             f"seed: {counter}"
-        )
+            )
 
-        # === Сохранение лучшей модели по P/L ===
         if pnl > best_pnl:
             best_pnl = pnl
             epochs_no_improve = 0
@@ -188,11 +178,9 @@ for counter in range(1, 101):
             print(f"✅ Model saved with P/L: {best_pnl:.2f}")
         else:
             epochs_no_improve += 1
-
-        # === Ранняя остановка ===
-        if epochs_no_improve >= early_stop_epochs:
-            print(f"🛑 Early stopping at epoch {epoch + 1}")
-            break
+            if epochs_no_improve >= early_stop_epochs:
+                print(f"🛑 Early stopping at epoch {epoch + 1}")
+                break
 
     # === 7. ЗАГРУЗКА ЛУЧШЕЙ МОДЕЛИ И ФИНАЛЬНЫЙ ТЕСТ ===
     print("\n🔹 Loading best model for final evaluation...")
@@ -201,10 +189,10 @@ for counter in range(1, 101):
 
     y_preds_final = []
     with torch.no_grad():
-        for X_candle_batch, X_volume_batch, _ in test_loader:
-            X_candle_batch, X_volume_batch = X_candle_batch.to(device), X_volume_batch.to(device)
-            y_pred = model(X_candle_batch, X_volume_batch).squeeze().cpu().numpy()
+        for X_candle_batch, X_volume_batch, X_day_batch, _ in test_loader:
+            X_candle_batch, X_volume_batch, X_day_batch = X_candle_batch.to(device), X_volume_batch.to(device), X_day_batch.to(device)
+            y_pred = model(X_candle_batch, X_volume_batch, X_day_batch).squeeze().cpu().numpy()
             y_preds_final.extend(y_pred)
 
     final_pnl = calculate_pnl(y_preds_final, test_open_prices, test_close_prices)
-    print(f"🏆 Final Test P/L: {final_pnl:.2f}")
+    print(f"🏆 Финальный тест P/L: {final_pnl:.2f}\n")
