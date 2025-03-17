@@ -7,11 +7,9 @@ import pandas as pd
 import random
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
-from sklearn.preprocessing import StandardScaler
-import json
 import os
 # Импортируем балансировку и кодировку свечей
-from data_processing import balance_classes, encode_candle, calculate_pnl
+from data_processing import balance_classes, data_prepare, calculate_pnl
 
 # === СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
 class CandleLSTM(nn.Module):
@@ -72,10 +70,6 @@ def set_seed(seed=42):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-# Загрузка полного словаря для преобразования кода свечи в числовой формат
-with open("code_full_int.json", "r") as f:
-    code_to_int = json.load(f)
-
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
 
 for counter in range(1, 101):
@@ -93,57 +87,39 @@ for counter in range(1, 101):
             conn
         )
 
-    # Создание кодов свечей по Лиховидову
-    df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
-
-    # === 3. ПОДГОТОВКА ДАННЫХ ===
-    # Преобразуем свечные коды в числовой формат (список уникальных кодов)
-    df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
-
-    # Создание колонки направления.
-    df_fut['DIRECTION'] = (df_fut['CLOSE'] > df_fut['OPEN']).astype(int)
-
-    # Создание колонок с признаками 'CANDLE_INT' за 20 предыдущих свечей
-    for i in range(1, 21):
-        df_fut[f'CI_{i}'] = df_fut['CANDLE_INT'].shift(i).astype('Int64')
-
-    # Создание колонок с объемом за 20 предыдущих свечей
-    for i in range(1, 21):
-        df_fut[f'VOL_{i}'] = df_fut['VOLUME'].shift(i).astype('Int64')
-
-    df_fut = df_fut.dropna().reset_index(drop=True)
+    df_fut = data_prepare(df_fut)
 
     # Создание дата сетов
     X_candle = df_fut[[f'CI_{i}' for i in range(1, 21)]].values
     X_volume = df_fut[[f'VOL_{i}' for i in range(1, 21)]].values
+    X_day = df_fut[[f'DAY_W_{i}' for i in range(1, 21)]].values
     y = df_fut['DIRECTION']
-    X_candle, X_volume, y = np.array(X_candle), np.array(X_volume), np.array(y)
-
-    # Нормализация объема
-    scaler = StandardScaler()
-    # # Нормализация относительно всего дата-сета
-    # X_volume = scaler.fit_transform(X_volume)
-    # Нормализация по окну из 20 значений.
-    X_volume = np.array([scaler.fit_transform(row.reshape(-1, 1)).flatten() for row in X_volume])
+    X_candle, X_volume, X_day, y = np.array(X_candle), np.array(X_volume), np.array(X_day), np.array(y)
 
     # Разделение на train/test
     split = int(0.85 * len(y))
     X_train_candle, X_train_volume, y_train = X_candle[:split], X_volume[:split], y[:split]
+    X_train_day = X_day[:split]
     X_test_candle, X_test_volume, y_test = X_candle[split:], X_volume[split:], y[split:]
+    X_test_day = X_day[split:]
 
     # === 4. Балансировка классов ===
-    X_train_candle, X_train_volume, y_train = balance_classes(X_train_candle, X_train_volume, y_train)
+    X_train_candle, X_train_volume, X_train_day, y_train = balance_classes(
+        X_train_candle, X_train_volume, X_train_day, y_train
+        )
 
     # === 5. СОЗДАНИЕ DATASET и DATALOADER ===
     X_train_candle = np.array(X_train_candle, dtype=np.int64)  # Привести к числовому типу
     X_train_volume = np.array(X_train_volume, dtype=np.float32)  # Привести к числовому типу
+    X_train_day = np.array(X_train_day, dtype=np.float32)  # Привести к числовому типу
     y_train = np.array(y_train, dtype=np.int64)  # Привести к числовому типу
     X_test_candle = np.array(X_test_candle, dtype=np.int64)  # Привести к числовому типу
     X_test_volume = np.array(X_test_volume, dtype=np.float32)  # Привести к числовому типу
+    X_test_day = np.array(X_test_day, dtype=np.float32)  # Привести к числовому типу
     y_test = np.array(y_test, dtype=np.int64)  # Привести к числовому типу
 
-    train_dataset = CandlestickDataset(X_train_candle, X_train_volume, y_train)
-    test_dataset = CandlestickDataset(X_test_candle, X_test_volume, y_test)
+    train_dataset = CandlestickDataset(X_train_candle, X_train_volume, X_train_day, y_train)
+    test_dataset = CandlestickDataset(X_test_candle, X_test_volume, X_test_day, y_test)
 
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
@@ -161,7 +137,7 @@ for counter in range(1, 101):
     early_stop_epochs = 200
     epochs_no_improve = 0
 
-    epochs = 200
+    epochs = 100
     for epoch in range(epochs):
         model.train()
         total_loss = 0

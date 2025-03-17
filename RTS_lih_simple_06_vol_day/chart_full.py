@@ -1,5 +1,5 @@
 """
-Сохранение 2 графиков (валидационного и тестового) в файл.
+Сохранение графика полной выборки в файл.
 """
 import sqlite3
 import torch
@@ -12,30 +12,37 @@ import json
 import os
 from sklearn.preprocessing import StandardScaler
 # Импортируем кодировку свечей
-from data_processing import encode_candle
+from data_processing import data_prepare
 
 
 # === ОПРЕДЕЛЕНИЕ МОДЕЛИ LSTM (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
 class CandleLSTM(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
+    def __init__(self, vocab_size, embedding_dim, day_vocab_size, day_embedding_dim, hidden_dim, output_dim):
         super(CandleLSTM, self).__init__()
 
         # Embedding слой для кодов свечей
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.embedding_candle = nn.Embedding(vocab_size, embedding_dim)
+        
+        # Embedding слой для дня недели
+        self.embedding_day = nn.Embedding(day_vocab_size, day_embedding_dim)
 
-        # LSTM принимает объединенные фичи (embedding + volume)
-        self.lstm = nn.LSTM(embedding_dim + 1, hidden_dim, batch_first=True)
+        # LSTM принимает объединенные фичи (embedding свечей + объем + embedding дня недели)
+        self.lstm = nn.LSTM(embedding_dim + 1 + day_embedding_dim, hidden_dim, batch_first=True)
 
         # Полносвязный слой для предсказания
         self.fc = nn.Linear(hidden_dim, output_dim)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x_candle, x_volume):
-        # Преобразуем коды свечей в embedding
-        x_candle = self.embedding(x_candle)
+    def forward(self, x_candle, x_volume, x_day):
+        # Преобразуем коды свечей и день недели в embeddings
+        x_candle = self.embedding_candle(x_candle)
+        x_day = self.embedding_day(x_day)
 
-        # Объединяем свечи и объем (по оси признаков)
-        x = torch.cat((x_candle, x_volume.unsqueeze(-1)), dim=-1)
+        # Объединяем свечи, объем и день недели
+        x = torch.cat((x_candle, x_volume.unsqueeze(-1), x_day), dim=-1)
+        # x = torch.cat((x_candle, x_volume[..., None], x_day), dim=-1)
+        # x = torch.cat((x_candle, x_volume.view(x_volume.shape[0], x_volume.shape[1], 1), x_day), dim=-1)
+        # print(f"x_volume.shape после unsqueeze: {x_volume.unsqueeze(-1).shape}")
 
         # Пропускаем через LSTM
         x, _ = self.lstm(x)
@@ -61,10 +68,6 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-# Загрузка полного словаря
-with open("code_full_int.json", "r") as f:
-    code_to_int = json.load(f)
-
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
 
 for counter in range(1, 101):
@@ -80,63 +83,39 @@ for counter in range(1, 101):
             conn
         )
 
-    # Создание кодов свечей по Лиховидову
-    df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
-
-    # === 4. ПОДГОТОВКА ДАННЫХ ===
-    # Преобразуем свечные коды в числовой формат (список уникальных кодов)
-    df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
-
-    # Создание колонки направления.
-    df_fut['DIRECTION'] = (df_fut['CLOSE'] > df_fut['OPEN']).astype(int)
-
-    # Создание колонок с признаками
-    for i in range(1, 21):
-        df_fut[f'CI_{i}'] = df_fut['CANDLE_INT'].shift(i).astype('Int64')
-    
-    # Создание колонок с объемом за 20 предыдущих свечей
-    for i in range(1, 21):
-        df_fut[f'VOL_{i}'] = df_fut['VOLUME'].shift(i).astype('Int64')
-
-    df_fut = df_fut.dropna().reset_index(drop=True)
+    df_fut = data_prepare(df_fut)
 
     # === СОЗДАНИЕ ДАТА ФРЕЙМА С ФИЧАМИ И ТАРГЕТОМ ===
     feature_candle_columns = [col for col in df_fut.columns if col.startswith('CI_')]
     feature_volume_columns = [col for col in df_fut.columns if col.startswith('VOL_')]
+    feature_day_columns = [col for col in df_fut.columns if col.startswith('DAY_W_')]
 
     X_candle = df_fut[feature_candle_columns].values.astype(np.int64)
-    X_volume = df_fut[feature_volume_columns].values.astype(np.float32)
-
-    # === НОРМАЛИЗАЦИЯ ОБЪЕМОВ ===
-    scaler = StandardScaler()
-    X_volume = np.array([scaler.fit_transform(row.reshape(-1, 1)).flatten() for row in X_volume])
+    X_volume = df_fut[feature_volume_columns].values.astype(np.int64)
+    X_day = df_fut[feature_day_columns].values.astype(np.int64)
 
     # === ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model_path = Path(fr"model\best_model_{counter}.pth")
-    model = CandleLSTM(vocab_size=27, embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
+    model = CandleLSTM(vocab_size=27, embedding_dim=8, day_vocab_size=7, day_embedding_dim=4, hidden_dim=32, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
     # === ПОДГОТОВКА ДАННЫХ ДЛЯ ПРЕДСКАЗАНИЯ ===
     X_candle_tensor = torch.tensor(X_candle, dtype=torch.long).to(device)
     X_volume_tensor = torch.tensor(X_volume, dtype=torch.float32).to(device)
+    X_day_tensor = torch.tensor(X_day, dtype=torch.long).to(device)
 
     # === ПРОГНОЗ ===
     with torch.no_grad():
-        predictions = model(X_candle_tensor, X_volume_tensor).cpu().numpy()
+        predictions = model(X_candle_tensor, X_volume_tensor, X_day_tensor).cpu().numpy()
 
     df_fut['PREDICTION'] = (predictions > 0.5).astype(int)
 
-    # === РАЗДЕЛЕНИЕ НА ВАЛИДАЦИЮ ===
-    # split = int(len(df_fut) * 0.85)
-    # df_val = df_fut.iloc[split:].copy()
     df_fut = df_fut.copy()
     df_fut["RESULT"] = df_fut.apply(calculate_result, axis=1)
     df_fut["CUMULATIVE_RESULT"] = df_fut["RESULT"].cumsum()
-
-    
 
     # === СОХРАНЕНИЕ ГРАФИКОВ === -----------------------------------------------------------------
     # === ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
@@ -158,4 +137,4 @@ for counter in range(1, 101):
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}'")
     # plt.show()
-    
+    plt.close()  # Закрываем текущую фигуру
