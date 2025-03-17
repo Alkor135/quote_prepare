@@ -102,6 +102,7 @@ for counter in range(1, 101):
     # Разделение на train/test
     split = int(0.85 * len(y))
     X_train_candle, X_train_volume, X_train_day, y_train = X_candle[:split], X_volume[:split], X_day[:split], y[:split]
+    # X_train_candle, X_train_volume, X_train_day, y_train = map(lambda x: x[:split], [X_candle, X_volume, X_day, y])
     X_test_candle, X_test_volume, X_test_day, y_test = X_candle[split:], X_volume[split:], X_day[split:], y[split:]
 
     # Балансировка классов
