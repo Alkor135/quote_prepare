@@ -161,7 +161,7 @@ for counter in range(1, 101):
     early_stop_epochs = 200
     epochs_no_improve = 0
 
-    epochs = 2000
+    epochs = 200
     for epoch in range(epochs):
         model.train()
         total_loss = 0
