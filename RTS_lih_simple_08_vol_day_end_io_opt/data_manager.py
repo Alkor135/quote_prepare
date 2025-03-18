@@ -6,30 +6,26 @@ import numpy as np
 import sqlite3
 import os
 
-def read_data(db_patch):
+def read_data(db_path, start_date, end_date):
     # Чтение данных по фьючерсам
+    query = """
+        SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME, LSTTRADE, OPENPOSITION 
+        FROM Futures 
+        WHERE TRADEDATE BETWEEN ? AND ? 
+        ORDER BY TRADEDATE
+    """
     with sqlite3.connect(db_path) as conn:
-        df_fut = pd.read_sql_query(
-            """
-            SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME, OPENPOSITION 
-            FROM Futures 
-            WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
-            ORDER BY TRADEDATE
-            """,
-            conn
-        )
+        df_fut = pd.read_sql_query(query, conn, params=(start_date, end_date))
 
     # Чтение данных по опционам
+    query = """
+        SELECT TRADEDATE, OPENPOSITION, OPTIONTYPE, STRIKE
+        FROM Options 
+        WHERE TRADEDATE BETWEEN ? AND ? 
+        ORDER BY TRADEDATE
+    """
     with sqlite3.connect(db_path) as conn:
-        df_opt = pd.read_sql_query(
-            """
-            SELECT TRADEDATE, OPENPOSITION, OPTIONTYPE, STRIKE
-            FROM Options 
-            WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
-            ORDER BY TRADEDATE
-            """,
-            conn
-        )
+        df_opt = pd.read_sql_query(query, conn, params=(start_date, end_date))
 
     # Преобразуем TRADEDATE в datetime
     df_fut['TRADEDATE'] = pd.to_datetime(df_fut['TRADEDATE'])
@@ -82,6 +78,10 @@ if __name__ == '__main__':
     script_dir = Path(__file__).parent
     os.chdir(script_dir)
 
-    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day.db')
+    # Переменные с датами
+    start_date = '2014-01-01'
+    end_date = '2024-01-01'
 
-    read_data(db_path)
+    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
+
+    read_data(db_path, start_date, end_date)

@@ -1,7 +1,6 @@
 """
 Сохранение 2 графиков (валидационного и тестового) в файл.
 """
-import sqlite3
 import torch
 import torch.nn as nn
 import pandas as pd
@@ -9,43 +8,30 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 import os
-# Импортируем кодировку свечей
-from data_processing import data_prepare
+from data_read import data_load
 
 
 # === ОПРЕДЕЛЕНИЕ МОДЕЛИ LSTM (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
 class CandleLSTM(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, day_vocab_size, day_embedding_dim, hidden_dim, output_dim):
+    def __init__(self, vocab_size, embedding_dim, day_vocab_size, day_embedding_dim, 
+                 dd_vocab_size, dd_embedding_dim, hidden_dim, output_dim):
         super(CandleLSTM, self).__init__()
-
-        # Embedding слой для кодов свечей
         self.embedding_candle = nn.Embedding(vocab_size, embedding_dim)
-        
-        # Embedding слой для дня недели
         self.embedding_day = nn.Embedding(day_vocab_size, day_embedding_dim)
-
-        # LSTM принимает объединенные фичи (embedding свечей + объем + embedding дня недели)
-        self.lstm = nn.LSTM(embedding_dim + 1 + day_embedding_dim, hidden_dim, batch_first=True)
-
-        # Полносвязный слой для предсказания
+        self.embedding_dd = nn.Embedding(dd_vocab_size, dd_embedding_dim)
+        input_dim = embedding_dim + 1 + day_embedding_dim + dd_embedding_dim + 5
+        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
         self.fc = nn.Linear(hidden_dim, output_dim)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x_candle, x_volume, x_day):
-        # Преобразуем коды свечей и день недели в embeddings
+    def forward(self, x_candle, x_volume, x_day, x_dd, x_io, x_c_itm, x_c_otm, x_p_itm, x_p_otm):
         x_candle = self.embedding_candle(x_candle)
         x_day = self.embedding_day(x_day)
-
-        # Объединяем свечи, объем и день недели
-        x = torch.cat((x_candle, x_volume.unsqueeze(-1), x_day), dim=-1)
-        # x = torch.cat((x_candle, x_volume[..., None], x_day), dim=-1)
-        # x = torch.cat((x_candle, x_volume.view(x_volume.shape[0], x_volume.shape[1], 1), x_day), dim=-1)
-        # print(f"x_volume.shape после unsqueeze: {x_volume.unsqueeze(-1).shape}")
-
-        # Пропускаем через LSTM
+        x_dd = self.embedding_dd(x_dd)
+        x = torch.cat((x_candle, x_volume.unsqueeze(-1), x_day, x_dd, 
+                       x_io.unsqueeze(-1), x_c_itm.unsqueeze(-1), x_c_otm.unsqueeze(-1), 
+                       x_p_itm.unsqueeze(-1), x_p_otm.unsqueeze(-1)), dim=-1)
         x, _ = self.lstm(x)
-
-        # Полносвязный слой и сигмоида
         x = self.fc(x[:, -1, :])
         return self.sigmoid(x)
 
@@ -66,37 +52,40 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 
 for counter in range(1, 101):
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
-    with sqlite3.connect(db_path) as conn:
-        df_fut = pd.read_sql_query(
-            """
-            SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
-            WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
-            ORDER BY TRADEDATE
-            """,
-            conn
-        )
-
-    df_fut = data_prepare(df_fut)
+    start_date = '2014-01-01'
+    end_date = '2024-01-01'
+    df_fut = data_load(db_path, start_date, end_date)
 
     # === СОЗДАНИЕ ДАТА ФРЕЙМА С ФИЧАМИ И ТАРГЕТОМ ===
     feature_candle_columns = [col for col in df_fut.columns if col.startswith('CI_')]
     feature_volume_columns = [col for col in df_fut.columns if col.startswith('VOL_')]
     feature_day_columns = [col for col in df_fut.columns if col.startswith('DAY_W_')]
+    feature_dd_columns = [col for col in df_fut.columns if col.startswith('DD_')]
+    feature_io_columns = [col for col in df_fut.columns if col.startswith('IO_')]
+    feature_c_itm_columns = [col for col in df_fut.columns if col.startswith('C-ITM_')]
+    feature_c_otm_columns = [col for col in df_fut.columns if col.startswith('C-OTM_')]
+    feature_p_itm_columns = [col for col in df_fut.columns if col.startswith('P-ITM_')]
+    feature_p_otm_columns = [col for col in df_fut.columns if col.startswith('P-OTM_')]
 
     X_candle = df_fut[feature_candle_columns].values.astype(np.int64)
-    X_volume = df_fut[feature_volume_columns].values.astype(np.int64)
+    X_volume = df_fut[feature_volume_columns].values.astype(np.float32)
     X_day = df_fut[feature_day_columns].values.astype(np.int64)
+    X_dd = df_fut[feature_dd_columns].values.astype(np.int64)
+    X_io = df_fut[feature_io_columns].values.astype(np.float32)
+    X_c_itm = df_fut[feature_c_itm_columns].values.astype(np.float32)
+    X_c_otm = df_fut[feature_c_otm_columns].values.astype(np.float32)
+    X_p_itm = df_fut[feature_p_itm_columns].values.astype(np.float32)
+    X_p_otm = df_fut[feature_p_otm_columns].values.astype(np.float32)
 
     # === ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model_path = Path(fr"model\best_model_{counter}.pth")
-    model = CandleLSTM(vocab_size=27, embedding_dim=8, day_vocab_size=7, day_embedding_dim=4, hidden_dim=32, output_dim=1).to(device)
+    model = CandleLSTM(27, 8, 7, 4, 104, 4, 32, 1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
@@ -104,10 +93,18 @@ for counter in range(1, 101):
     X_candle_tensor = torch.tensor(X_candle, dtype=torch.long).to(device)
     X_volume_tensor = torch.tensor(X_volume, dtype=torch.float32).to(device)
     X_day_tensor = torch.tensor(X_day, dtype=torch.long).to(device)
+    X_dd_tensor = torch.tensor(X_dd, dtype=torch.long).to(device)
+    X_io_tensor = torch.tensor(X_io, dtype=torch.float32).to(device)
+    X_c_itm_tensor = torch.tensor(X_c_itm, dtype=torch.float32).to(device)
+    X_c_otm_tensor = torch.tensor(X_c_otm, dtype=torch.float32).to(device)
+    X_p_itm_tensor = torch.tensor(X_p_itm, dtype=torch.float32).to(device)
+    X_p_otm_tensor = torch.tensor(X_p_otm, dtype=torch.float32).to(device)
 
     # === ПРОГНОЗ ===
     with torch.no_grad():
-        predictions = model(X_candle_tensor, X_volume_tensor, X_day_tensor).cpu().numpy()
+        predictions = model(
+            X_candle_tensor, X_volume_tensor, X_day_tensor, X_dd_tensor, X_io_tensor, X_c_itm_tensor, X_c_otm_tensor, X_p_itm_tensor, X_p_otm_tensor
+            ).cpu().numpy()
 
     df_fut['PREDICTION'] = (predictions > 0.5).astype(int)
 
@@ -118,37 +115,36 @@ for counter in range(1, 101):
     df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
 
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
-    with sqlite3.connect(db_path) as conn:
-        df_fut = pd.read_sql_query(
-            """
-            SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
-            WHERE TRADEDATE >= '2023-01-01' 
-            ORDER BY TRADEDATE
-            """,
-            conn
-        )
-
-    df_fut = data_prepare(df_fut)
+    start_date = '2023-01-01'
+    end_date = '2025-03-10'
+    df_fut = data_load(db_path, start_date, end_date)
 
     # === СОЗДАНИЕ ДАТА ФРЕЙМА С ФИЧАМИ И ТАРГЕТОМ ===
     feature_candle_columns = [col for col in df_fut.columns if col.startswith('CI_')]
     feature_volume_columns = [col for col in df_fut.columns if col.startswith('VOL_')]
     feature_day_columns = [col for col in df_fut.columns if col.startswith('DAY_W_')]
+    feature_dd_columns = [col for col in df_fut.columns if col.startswith('DD_')]
+    feature_io_columns = [col for col in df_fut.columns if col.startswith('IO_')]
+    feature_c_itm_columns = [col for col in df_fut.columns if col.startswith('C-ITM_')]
+    feature_c_otm_columns = [col for col in df_fut.columns if col.startswith('C-OTM_')]
+    feature_p_itm_columns = [col for col in df_fut.columns if col.startswith('P-ITM_')]
+    feature_p_otm_columns = [col for col in df_fut.columns if col.startswith('P-OTM_')]
 
     X_candle = df_fut[feature_candle_columns].values.astype(np.int64)
-    X_volume = df_fut[feature_volume_columns].values.astype(np.int64)
+    X_volume = df_fut[feature_volume_columns].values.astype(np.float32)
     X_day = df_fut[feature_day_columns].values.astype(np.int64)
-
-    # print(f"x_candle.shape: {X_candle.shape}")
-    # print(f"x_volume.shape: {X_volume.shape}")
-    # print(f"x_day.shape: {X_day.shape}")
+    X_dd = df_fut[feature_dd_columns].values.astype(np.int64)
+    X_io = df_fut[feature_io_columns].values.astype(np.float32)
+    X_c_itm = df_fut[feature_c_itm_columns].values.astype(np.float32)
+    X_c_otm = df_fut[feature_c_otm_columns].values.astype(np.float32)
+    X_p_itm = df_fut[feature_p_itm_columns].values.astype(np.float32)
+    X_p_otm = df_fut[feature_p_otm_columns].values.astype(np.float32)
 
     # === ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model_path = Path(fr"model\best_model_{counter}.pth")
-    model = CandleLSTM(vocab_size=27, embedding_dim=8, day_vocab_size=7, day_embedding_dim=4, hidden_dim=32, output_dim=1).to(device)
+    model = CandleLSTM(27, 8, 7, 4, 104, 4, 32, 1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
@@ -156,10 +152,18 @@ for counter in range(1, 101):
     X_candle_tensor = torch.tensor(X_candle, dtype=torch.long).to(device)
     X_volume_tensor = torch.tensor(X_volume, dtype=torch.float32).to(device)
     X_day_tensor = torch.tensor(X_day, dtype=torch.long).to(device)
+    X_dd_tensor = torch.tensor(X_dd, dtype=torch.long).to(device)
+    X_io_tensor = torch.tensor(X_io, dtype=torch.float32).to(device)
+    X_c_itm_tensor = torch.tensor(X_c_itm, dtype=torch.float32).to(device)
+    X_c_otm_tensor = torch.tensor(X_c_otm, dtype=torch.float32).to(device)
+    X_p_itm_tensor = torch.tensor(X_p_itm, dtype=torch.float32).to(device)
+    X_p_otm_tensor = torch.tensor(X_p_otm, dtype=torch.float32).to(device)
 
     # === ПРОГНОЗ ===
     with torch.no_grad():
-        predictions = model(X_candle_tensor, X_volume_tensor, X_day_tensor).cpu().numpy()
+        predictions = model(
+            X_candle_tensor, X_volume_tensor, X_day_tensor, X_dd_tensor, X_io_tensor, X_c_itm_tensor, X_c_otm_tensor, X_p_itm_tensor, X_p_otm_tensor
+            ).cpu().numpy()
 
     df_fut['PREDICTION'] = (predictions > 0.5).astype(int)
 
