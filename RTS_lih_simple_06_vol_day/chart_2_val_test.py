@@ -66,7 +66,7 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 
 for counter in range(1, 101):
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
@@ -74,7 +74,7 @@ for counter in range(1, 101):
         df_fut = pd.read_sql_query(
             """
             SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
+            FROM Futures 
             WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
             ORDER BY TRADEDATE
             """,
@@ -122,9 +122,9 @@ for counter in range(1, 101):
         df_fut = pd.read_sql_query(
             """
             SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
-            WHERE TRADEDATE >= '2023-01-01' 
-            ORDER BY TRADEDATE
+            FROM Futures 
+            WHERE TRADEDATE BETWEEN '2023-01-01' AND '2024-03-10' 
+            ORDER BY TRADEDATE 
             """,
             conn
         )

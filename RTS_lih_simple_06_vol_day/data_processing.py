@@ -166,7 +166,7 @@ def data_prepare(df_fut):
         df_fut[f'CI_{i}'] = df_fut['CANDLE_INT'].shift(i).astype('Int64')
 
     # # Создание новой колонки с нормированными значениями
-    # df_fut['VOL_NORM'] = (
+    # df_fut['VOL-NORM'] = (
     #     df_fut['VOLUME']
     #     .shift(1)  # Исключаем текущее значение
     #     .rolling(window=20)  # Смотрим на 20 предыдущих значений
@@ -219,14 +219,14 @@ if __name__ == '__main__':
     script_dir = Path(__file__).parent
     os.chdir(script_dir)
 
-    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
+    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 
     # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
     with sqlite3.connect(db_path) as conn:
         df_fut = pd.read_sql_query(
             """
             SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
+            FROM Futures 
             WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
             ORDER BY TRADEDATE
             """,

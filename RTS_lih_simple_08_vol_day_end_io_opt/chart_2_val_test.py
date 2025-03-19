@@ -85,7 +85,7 @@ for counter in range(1, 101):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model_path = Path(fr"model\best_model_{counter}.pth")
-    model = CandleLSTM(27, 8, 7, 4, 104, 4, 32, 1).to(device)
+    model = CandleLSTM(27, 8, 7, 4, 104, 4, 180, 1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
@@ -144,7 +144,7 @@ for counter in range(1, 101):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model_path = Path(fr"model\best_model_{counter}.pth")
-    model = CandleLSTM(27, 8, 7, 4, 104, 4, 32, 1).to(device)
+    model = CandleLSTM(27, 8, 7, 4, 104, 4, 180, 1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 

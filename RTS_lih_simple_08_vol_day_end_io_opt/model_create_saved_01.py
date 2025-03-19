@@ -110,7 +110,7 @@ for counter in range(1, 101):
 
     # === ОБУЧЕНИЕ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = CandleLSTM(27, 8, 7, 4, 104, 4, 32, 1).to(device)
+    model = CandleLSTM(27, 8, 7, 4, 104, 4, 180, 1).to(device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 

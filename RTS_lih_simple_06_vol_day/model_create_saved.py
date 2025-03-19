@@ -8,7 +8,6 @@ import random
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 import os
-
 # Импортируем балансировку и кодировку свечей
 from data_processing import balance_classes, data_prepare, calculate_pnl
 
@@ -69,7 +68,7 @@ def set_seed(seed=42):
     torch.backends.cudnn.benchmark = False
 
 # === 4. ЗАГРУЗКА ДАННЫХ ===
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 
 # Установка рабочей директории в папку, где находится файл скрипта
 script_dir = Path(__file__).parent
@@ -82,7 +81,7 @@ for counter in range(1, 101):
         df_fut = pd.read_sql_query(
             """
             SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
+            FROM Futures 
             WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
             ORDER BY TRADEDATE
             """,
