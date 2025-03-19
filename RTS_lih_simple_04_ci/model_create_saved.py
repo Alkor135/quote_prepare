@@ -138,7 +138,7 @@ for counter in range(101, 201):
     df_fut = df_fut.dropna().reset_index(drop=True)
 
     # Создание дата сетов
-    feature_columns = [col for col in df_fut.columns if col.startswith('CI')]
+    feature_columns = [col for col in df_fut.columns if col.startswith('CI_')]
     X = df_fut[feature_columns]
     y = df_fut['DIRECTION']
     X, y = np.array(X), np.array(y)
