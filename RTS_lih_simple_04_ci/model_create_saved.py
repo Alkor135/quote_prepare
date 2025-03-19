@@ -104,7 +104,7 @@ os.chdir(script_dir)
 with open("code_full_int.json", "r") as f:
     code_to_int = json.load(f)
 
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 
 for counter in range(101, 201):
     set_seed(counter)  # Устанавливаем одинаковый seed
@@ -114,7 +114,7 @@ for counter in range(101, 201):
         df_fut = pd.read_sql_query(
             """
             SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
+            FROM Futuures 
             WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
             ORDER BY TRADEDATE
             """,
