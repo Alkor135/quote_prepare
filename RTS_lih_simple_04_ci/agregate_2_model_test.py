@@ -31,9 +31,9 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-# [81, 172] 151
-first_model = 81
-second_model = 172
+# [3, 69] 29, 30, 34, 53, 62, 69, 72
+first_model = 3
+second_model = 69
 
 # === ЗАГРУЗКА ФАЙЛА ===
 df = pd.read_csv(r"pred_res_cum.csv")
@@ -56,11 +56,11 @@ sum_negative = df[df['RESULT'] < 0]['RESULT'].sum()
 count_1 = ((df[f'PRED_{first_model}'] == 1.0) & (df[f'PRED_{second_model}'] == 1.0)).sum()
 count_0 = ((df[f'PRED_{first_model}'] == 0.0) & (df[f'PRED_{second_model}'] == 0.0)).sum()
 
-print(f"Количество значений равных 0.0: {count_zeros}")
-print(f"Количество положительных значений: {num_positive}")
-print(f"Количество отрицательных значений: {num_negative}")
-print(f"Сумма положительных значений: {sum_positive}")
-print(f"Сумма отрицательных значений: {sum_negative}")
+print(f"Количество значений равных 0.0 (противоположные предсказания): {count_zeros}")
+print(f"Количество положительных значений (совпадение предсказаний и факта): {num_positive}")
+print(f"Количество отрицательных значений (различие предсказаний и факта): {num_negative}")
+print(f"Сумма положительных значений (Profit): {sum_positive}")
+print(f"Сумма отрицательных значений (Loss): {sum_negative}")
 print(f"Парных сигналов (от двух моделей) на покупку: {count_1}")
 print(f"Парных сигналов (от двух моделей) на продажу: {count_0}")
 
@@ -119,7 +119,7 @@ plt.title("Cumulative Sum of Prediction combined 2 models")
 plt.legend()
 plt.grid()
 
-plt.xticks(df["TRADEDATE"][::10], rotation=90)
+plt.xticks(df["TRADEDATE"][::5], rotation=90)
 plt.show()
 
 
@@ -139,5 +139,5 @@ plt.title("Cumulative Sum of Prediction combined 2 models")
 plt.legend()
 plt.grid()
 
-plt.xticks(df["TRADEDATE"][::10], rotation=90)
+plt.xticks(df["TRADEDATE"][::5], rotation=90)
 plt.show()

@@ -7,9 +7,8 @@ import pandas as pd
 import random
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
-from sklearn.utils import resample
-import json
 import os
+from data_read import data_load, balance_classes
 
 
 # === СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
@@ -100,46 +99,16 @@ def calculate_pnl(y_preds, open_prices, close_prices):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-# Загрузка полного словаря для преобразования кода свечи в числовой формат
-with open("code_full_int.json", "r") as f:
-    code_to_int = json.load(f)
-
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 
-for counter in range(101, 201):
+for counter in range(1, 101):
     set_seed(counter)  # Устанавливаем одинаковый seed
 
     # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
-    with sqlite3.connect(db_path) as conn:
-        df_fut = pd.read_sql_query(
-            """
-            SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Futuures 
-            WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
-            ORDER BY TRADEDATE
-            """,
-            conn
-        )
-
-    # Создание кодов свечей по Лиховидову
-    df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
-
-    # === 3. ПОДГОТОВКА ДАННЫХ ===
-    # Преобразуем свечные коды в числовой формат (список уникальных кодов)
-    df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
-
-    # Создание колонки направления.
-    df_fut['DIRECTION'] = (df_fut['CLOSE'] > df_fut['OPEN']).astype(int)
-
-    # Создание колонок с признаками
-    for i in range(1, 21):
-        df_fut[f'CI_{i}'] = df_fut['CANDLE_INT'].shift(i).astype('Int64')
-
-    df_fut = df_fut.dropna().reset_index(drop=True)
+    df_fut = data_load(db_path, '2014-01-01', '2024-01-01')
 
     # Создание дата сетов
-    feature_columns = [col for col in df_fut.columns if col.startswith('CI_')]
-    X = df_fut[feature_columns]
+    X = df_fut[[f'CI_{i}' for i in range(1, 21)]].values
     y = df_fut['DIRECTION']
     X, y = np.array(X), np.array(y)
 
@@ -148,48 +117,8 @@ for counter in range(101, 201):
     X_train, y_train = X[:split], y[:split]
     X_test, y_test = X[split:], y[split:]
 
-    # === 4. Балансировка классов === -------------------------------------------------------------
-    # Объединяем X_train и y_train в один DataFrame
-    df_train = pd.DataFrame(X_train)
-    df_train['TARGET'] = y_train  # Добавляем колонку с целевой меткой
-
-    # Проверяем начальное распределение классов
-    class_counts = df_train['TARGET'].value_counts()
-    print("Распределение перед балансировкой:\n", class_counts)
-
-    # Определяем миноритарный и мажоритарный классы
-    min_class = class_counts.idxmin()
-    max_class = class_counts.idxmax()
-
-    # Разделяем по классам
-    df_minority = df_train[df_train['TARGET'] == min_class]
-    df_majority = df_train[df_train['TARGET'] == max_class]
-
-    # Убираем из миноритарного класса строки, которые полностью совпадают 
-    # с мажоритарным классом по фичам  
-    df_minority_unique = df_minority.loc[  
-        ~df_minority.drop(columns=['TARGET']).apply(tuple, axis=1).isin(  
-            df_majority.drop(columns=['TARGET']).apply(tuple, axis=1)  
-        )]  
-    
-    # Дублируем ОТФИЛЬТРОВАННЫЕ примеры редкого класса рандомно
-    df_minority_upsampled = resample(df_minority_unique,  
-                                    replace=True,  
-                                    n_samples=len(df_majority),  
-                                    random_state=42)  
-
-    # Объединяем оба класса и перемешиваем
-    df_balanced = pd.concat([df_majority, df_minority_upsampled]).sample(frac=1, random_state=42)
-
-    # Разделяем обратно на X_train и y_train
-    X_train = df_balanced.drop(columns=['TARGET']).values
-    y_train = df_balanced['TARGET'].values
-    X_train = np.array(X_train, dtype=np.int64)  # Привести к числовому типу
-    y_train = np.array(y_train, dtype=np.int64)  # Привести к числовому типу
-
-    # Проверяем новое распределение
-    print("Распределение после балансировки:\n", pd.Series(y_train).value_counts())
-    # Конец балансировки --------------------------------------------------------------------------
+    # === 4. Балансировка классов === 
+    X_train, y_train = balance_classes(X_train, y_train)
 
     # === 5. СОЗДАНИЕ DATASET и DATALOADER ===
     X_test = np.array(X_test, dtype=np.int64)  # Привести к числовому типу

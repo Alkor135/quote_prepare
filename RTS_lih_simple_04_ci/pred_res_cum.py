@@ -6,7 +6,6 @@
 Только тест.
 Сохранение дата фрейма в файл для анализа.
 """
-import sqlite3
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -18,6 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.utils import resample
 import json
 import os
+from data_read import data_load
 
 
 # === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
@@ -81,33 +81,17 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-# Загрузка полного словаря
-with open("code_full_int.json", "r") as f:
-    code_to_int = json.load(f)
 
-
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 data_path = Path(fr"pred_res_cum.csv")
 df_data = pd.DataFrame()
 
-for counter in range(1, 201):
+for counter in range(1, 101):
     # ---------------------------------------------------------------------------------------------
     # === 1. ЗАГРУЗКА ДАННЫХ ===
-    with sqlite3.connect(db_path) as conn:
-        df_fut = pd.read_sql_query(
-            """
-            SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
-            WHERE TRADEDATE >= '2023-01-01' 
-            ORDER BY TRADEDATE
-            """,
-            conn
-        )
+    df_fut = data_load(db_path, '2023-01-01', '2025-03-10')
 
-    df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
-
-    # === 3. ПРЕОБРАЗОВАНИЕ КОДОВ В ЧИСЛА ===
-    df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
+    df_fut = df_fut.dropna().reset_index(drop=True)
 
     window_size = 20
 
@@ -120,17 +104,19 @@ for counter in range(1, 201):
     model.eval()
 
     # === 6. ПРОГНОЗИРОВАНИЕ ===
-    predictions = []
+    # 1. Определяем фичи
+    X_features = df_fut[[f'CI_{i}' for i in range(1, 21)]].values
+    X_features = np.array(X_features, dtype=np.int64)  # Привести к числовому типу
+
+    # 2. Преобразуем в тензор (и перемещаем на `device`)
+    X_tensor = torch.tensor(X_features, dtype=torch.long).to(device)
+
+    # 3. Получаем предсказания
     with torch.no_grad():
-        for i in range(len(df_fut) - window_size):
-            sequence = torch.tensor(
-                df_fut['CANDLE_INT'].iloc[i:i + window_size].values, dtype=torch.long
-            ).unsqueeze(0).to(device)
-            pred = model(sequence).item()
-            predictions.append(1 if pred > 0.5 else 0)
+        predictions = model(X_tensor).cpu().numpy()  # Переводим обратно на CPU
 
     # Заполняем колонку PREDICTION (первые window_size значений - NaN)
-    df_fut[f'PRED_{counter}'] = [None] * window_size + predictions
+    df_fut[f'PRED_{counter}'] = (predictions > 0.5).astype(int)  # Если Sigmoid
 
     # Выбор строк, где TRADEDATE больше 2024-01-01
     df = df_fut[df_fut['TRADEDATE'] > '2024-01-01'].copy()
@@ -162,12 +148,15 @@ for counter in range(1, 201):
             df_data,
             df,
             how='right',  # правое слияние
-            on=['TRADEDATE', 'OPEN', 'LOW', 'HIGH', 'CLOSE', 'VOLUME', 'CANDLE_CODE',
-                'CANDLE_INT'],
+            on=['TRADEDATE', 'OPEN', 'LOW', 'HIGH', 'CLOSE', 'DIRECTION'].extend([f'CI_{i}' for i in range(1, 21)]),
             suffixes=('_x', '_y')  # добавляем суффиксы для различения одинаковых колонок
         )
 
     # === 4. Сохранение данных в файл ===
     df_data.to_csv(data_path, index=False)
-    print(f"✅ Данные сохранены в файл: '{data_path}', {counter=}\n")
+    print(f"✅ Данные сохранены в файл: '{data_path}', {counter=}")
     # print(df_data)
+
+df_data.drop(columns=[f'CI_{i}' for i in range(1, 21)], inplace=True)
+df_data.to_csv(data_path, index=False)
+print(f"✅ Финальное сохранение в файл: '{data_path}', {counter=}")

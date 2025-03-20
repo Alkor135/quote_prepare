@@ -8,8 +8,8 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
-import json
 import os
+from data_read import data_load, balance_classes
 
 
 # === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
@@ -73,43 +73,13 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-# Загрузка полного словаря
-with open("code_full_int.json", "r") as f:
-    code_to_int = json.load(f)
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_day_full.db')
-
-for counter in range(101, 201):
+for counter in range(1, 101):
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
-    with sqlite3.connect(db_path) as conn:
-        df_fut = pd.read_sql_query(
-            """
-            SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
-            WHERE TRADEDATE BETWEEN '2014-01-01' AND '2024-01-01' 
-            ORDER BY TRADEDATE
-            """,
-            conn
-        )
-
-    # Создание кодов свечей по Лиховидову
-    df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
-
-    # === 4. ПОДГОТОВКА ДАННЫХ ===
-    # Преобразуем свечные коды в числовой формат (список уникальных кодов)
-    df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
-
-    # Создание колонки направления.
-    df_fut['DIRECTION'] = (df_fut['CLOSE'] > df_fut['OPEN']).astype(int)
-
-    # Создание колонок с признаками
-    for i in range(1, 21):
-        df_fut[f'CI_{i}'] = df_fut['CANDLE_INT'].shift(i).astype('Int64')
+    df_fut = data_load(db_path, '2014-01-01', '2024-01-01')
 
     df_fut = df_fut.dropna().reset_index(drop=True)
-
-    # Создание дата фрейма с фичами и таргетом
-    feature_columns = [col for col in df_fut.columns if col.startswith('CI')]
 
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -121,8 +91,7 @@ for counter in range(101, 201):
 
     # === 6. ПРОГНОЗИРОВАНИЕ ===
     # 1. Определяем фичи
-    # feature_columns = [col for col in df_fut.columns if col.startswith('CI')]
-    X_features = df_fut[feature_columns].values  # Преобразуем в массив numpy
+    X_features = df_fut[[f'CI_{i}' for i in range(1, 21)]].values
     X_features = np.array(X_features, dtype=np.int64)  # Привести к числовому типу
 
     # 2. Преобразуем в тензор (и перемещаем на `device`)
@@ -144,35 +113,9 @@ for counter in range(101, 201):
     df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
 
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
-    with sqlite3.connect(db_path) as conn:
-        df_fut = pd.read_sql_query(
-            """
-            SELECT TRADEDATE, OPEN, LOW, HIGH, CLOSE, VOLUME 
-            FROM Day 
-            WHERE TRADEDATE >= '2023-01-01' 
-            ORDER BY TRADEDATE
-            """,
-            conn
-        )
-
-    # Создание кодов свечей по Лиховидову
-    df_fut['CANDLE_CODE'] = df_fut.apply(encode_candle, axis=1)
-
-    # === 4. ПОДГОТОВКА ДАННЫХ ===
-    # Преобразуем свечные коды в числовой формат (список уникальных кодов)
-    df_fut['CANDLE_INT'] = df_fut['CANDLE_CODE'].map(code_to_int)
-
-    # Создание колонки направления.
-    df_fut['DIRECTION'] = (df_fut['CLOSE'] > df_fut['OPEN']).astype(int)
-
-    # Создание колонок с признаками
-    for i in range(1, 21):
-        df_fut[f'CI_{i}'] = df_fut['CANDLE_INT'].shift(i).astype('Int64')
+    df_fut = data_load(db_path, '2023-01-01', '2025-03-10')
 
     df_fut = df_fut.dropna().reset_index(drop=True)
-
-    # Создание дата фрейма с фичами и таргетом
-    feature_columns = [col for col in df_fut.columns if col.startswith('CI')]
 
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -184,13 +127,11 @@ for counter in range(101, 201):
 
     # === 6. ПРОГНОЗИРОВАНИЕ ===
     # 1. Определяем фичи
-    feature_columns = [col for col in df_fut.columns if col.startswith('CI')]
-    X_features = df_fut[feature_columns].values  # Преобразуем в массив numpy
+    X_features = df_fut[[f'CI_{i}' for i in range(1, 21)]].values
     X_features = np.array(X_features, dtype=np.int64)  # Привести к числовому типу
 
     # 2. Преобразуем в тензор (и перемещаем на `device`)
     X_tensor = torch.tensor(X_features, dtype=torch.long).to(device)
-    # X_tensor = np.array(X_tensor, dtype=np.int64)  # Привести к числовому типу
 
     # 3. Получаем предсказания
     with torch.no_grad():
@@ -239,6 +180,7 @@ for counter in range(101, 201):
     plt.tight_layout()
     img_path = Path(fr"chart_2/s_{counter}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
-    print(f"✅ График сохранен в файл: '{img_path}' \n")
+    print(f"✅ График сохранен в файл: '{img_path}'")
     # plt.show()
+    plt.close()
     
