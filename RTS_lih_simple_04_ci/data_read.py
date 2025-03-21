@@ -4,6 +4,8 @@ from pathlib import Path
 import numpy as np
 import sqlite3
 import os
+import sys
+sys.dont_write_bytecode = True
 
 
 def balance_classes(X, y):

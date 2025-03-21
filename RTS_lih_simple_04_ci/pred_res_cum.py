@@ -8,16 +8,14 @@
 """
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import numpy as np
 import pandas as pd
-import random
 from pathlib import Path
-from torch.utils.data import Dataset, DataLoader
-from sklearn.utils import resample
-import json
 import os
 from data_read import data_load
+import shutil
+import sys
+sys.dont_write_bytecode = True
 
 
 # === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
@@ -88,6 +86,9 @@ df_data = pd.DataFrame()
 
 for counter in range(1, 101):
     # ---------------------------------------------------------------------------------------------
+    # Удаляем папку __pycache__ (если она была создана)
+    shutil.rmtree('__pycache__', ignore_errors=True)
+
     # === 1. ЗАГРУЗКА ДАННЫХ ===
     df_fut = data_load(db_path, '2023-01-01', '2025-03-10')
 
@@ -148,7 +149,9 @@ for counter in range(1, 101):
             df_data,
             df,
             how='right',  # правое слияние
-            on=['TRADEDATE', 'OPEN', 'LOW', 'HIGH', 'CLOSE', 'DIRECTION'].extend([f'CI_{i}' for i in range(1, 21)]),
+            on=['TRADEDATE', 'OPEN', 'LOW', 'HIGH', 'CLOSE', 'DIRECTION'].extend(
+                [f'CI_{i}' for i in range(1, 21)]
+                ),
             suffixes=('_x', '_y')  # добавляем суффиксы для различения одинаковых колонок
         )
 

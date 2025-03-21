@@ -8,6 +8,7 @@ from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 import os
 from data_processing import balance_classes, calculate_pnl
+import shutil
 import sys
 sys.dont_write_bytecode = True
 
@@ -68,6 +69,9 @@ df = pd.read_csv(r'span_nn_prepare.csv', parse_dates=['TRADEDATE'])
 # print(df)
 
 for counter in range(1, 101):
+    # Удаляем папку __pycache__ (если она была создана)
+    shutil.rmtree('__pycache__', ignore_errors=True)
+    
     set_seed(counter)
     df_fut = df.query("'2014-01-01' <= TRADEDATE <= '2024-01-01'")
 
@@ -79,6 +83,7 @@ for counter in range(1, 101):
     X_train, y_train = (X_span[:split], y[:split])
     X_test, y_test = (X_span[split:], y[split:])
 
+    # importlib.reload(balance_classes)  # Перезагрузка модуля, чтобы не брал данные из кэша
     X_train, y_train = balance_classes(X_train, y_train)
 
     train_dataset = CandlestickDataset(X_train, y_train)
@@ -125,6 +130,7 @@ for counter in range(1, 101):
         # === Расчет P/L ===
         test_open_prices = df_fut['OPEN'].iloc[split:].values
         test_close_prices = df_fut['CLOSE'].iloc[split:].values
+        # importlib.reload(calculate_pnl)
         pnl = calculate_pnl(y_preds, test_open_prices, test_close_prices)
 
         print(

@@ -1,4 +1,3 @@
-import sqlite3
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -9,6 +8,9 @@ from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 import os
 from data_read import data_load, balance_classes
+import shutil
+import sys
+sys.dont_write_bytecode = True
 
 
 # === СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
@@ -102,6 +104,9 @@ os.chdir(script_dir)
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 
 for counter in range(1, 101):
+    # Удаляем папку __pycache__ (если она была создана)
+    shutil.rmtree('__pycache__', ignore_errors=True)
+
     set_seed(counter)  # Устанавливаем одинаковый seed
 
     # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
@@ -127,8 +132,12 @@ for counter in range(1, 101):
     train_dataset = CandlestickDataset(X_train, y_train)
     test_dataset = CandlestickDataset(X_test, y_test)
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker)
+    train_loader = DataLoader(
+        train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker
+        )
+    test_loader = DataLoader(
+        test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker
+        )
 
     # === 6. ОБУЧЕНИЕ МОДЕЛИ С ОПТИМИЗАЦИЕЙ ПО P/L ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -5,6 +5,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 from pathlib import Path
+import shutil
+import sys
+sys.dont_write_bytecode = True
 
 
 # === РАСЧЁТ РЕЗУЛЬТАТОВ ПРОГНОЗА ПО 2 МОДЕЛЯМ ===
@@ -141,3 +144,7 @@ plt.grid()
 
 plt.xticks(df["TRADEDATE"][::5], rotation=90)
 plt.show()
+plt.close()
+
+# Удаляем папку __pycache__ (если она была создана)
+shutil.rmtree('__pycache__', ignore_errors=True)

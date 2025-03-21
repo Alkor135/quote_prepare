@@ -8,6 +8,7 @@ from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 import os
 from data_processing import balance_classes, calculate_pnl
+import shutil
 import sys
 sys.dont_write_bytecode = True
 
@@ -58,6 +59,9 @@ os.chdir(script_dir)
 df = pd.read_csv(r'span_nn_prepare.csv', parse_dates=['TRADEDATE'])
 
 for counter in range(1, 101):
+    # Удаляем папку __pycache__ (если она была создана)
+    shutil.rmtree('__pycache__', ignore_errors=True)
+
     set_seed(counter)
     df_fut = df.query("'2014-01-01' <= TRADEDATE <= '2024-01-01'")
 

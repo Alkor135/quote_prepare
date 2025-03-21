@@ -1,7 +1,6 @@
 """
 Сохранение 2 графиков (валидационного и тестового) в файл.
 """
-import sqlite3
 import torch
 import torch.nn as nn
 import pandas as pd
@@ -9,7 +8,10 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 import os
-from data_read import data_load, balance_classes
+from data_read import data_load
+import shutil
+import sys
+sys.dont_write_bytecode = True
 
 
 # === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
@@ -76,6 +78,9 @@ os.chdir(script_dir)
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 
 for counter in range(1, 101):
+    # Удаляем папку __pycache__ (если она была создана)
+    shutil.rmtree('__pycache__', ignore_errors=True)
+    
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
     df_fut = data_load(db_path, '2014-01-01', '2024-01-01')
 
