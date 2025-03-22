@@ -66,15 +66,19 @@ for counter in range(1, 101):
     X_features = df_fut[[f'ed_{i}' for i in range(1, 21)]].values
     X_features = np.array(X_features, dtype=np.float32)  # Привести к числовому типу
 
-    # 2. Преобразуем в тензор (и перемещаем на `device`)
-    X_tensor = torch.tensor(X_features, dtype=torch.float32).to(device)
+    # # 2. Преобразуем в тензор (и перемещаем на `device`)
+    # X_tensor = torch.tensor(X_features, dtype=torch.float32).to(device)
+    # 🔥 Изменяем форму данных: (N, 20) → (N, 20, 1), чтобы соответствовать обученной модели
+    X_tensor = torch.tensor(X_features, dtype=torch.float32).unsqueeze(-1).to(device)
 
     # 3. Получаем предсказания
     with torch.no_grad():
         predictions = model(X_tensor).cpu().numpy()  # Переводим обратно на CPU
 
     # 4. Если модель бинарная: Преобразуем выходные значения в классы (0 или 1)
-    df_fut['PREDICTION'] = (predictions > 0.5).astype(int)  # Если Sigmoid
+    # df_fut['PREDICTION'] = (predictions > 0.5).astype(int)  # Если Sigmoid
+    df_fut['PREDICTION'] = predictions.argmax(axis=1)  # Выбираем индекс с наибольшей вероятностью (0 или 1)
+
 
     split = int(len(df_fut) * 0.85)  # 85% - обучающая выборка, 15% - тестовая
     df_val = df_fut.iloc[split:].copy()  # Берем последние 15%
@@ -103,15 +107,19 @@ for counter in range(1, 101):
     X_features = df_fut[[f'ed_{i}' for i in range(1, 21)]].values
     X_features = np.array(X_features, dtype=np.float32)  # Привести к числовому типу
 
-    # 2. Преобразуем в тензор (и перемещаем на `device`)
-    X_tensor = torch.tensor(X_features, dtype=torch.float32).to(device)
+    # # 2. Преобразуем в тензор (и перемещаем на `device`)
+    # X_tensor = torch.tensor(X_features, dtype=torch.float32).to(device)
+    # 🔥 Изменяем форму данных: (N, 20) → (N, 20, 1), чтобы соответствовать обученной модели
+    X_tensor = torch.tensor(X_features, dtype=torch.float32).unsqueeze(-1).to(device)
 
     # 3. Получаем предсказания
     with torch.no_grad():
         predictions = model(X_tensor).cpu().numpy()  # Переводим обратно на CPU
 
     # 4. Если модель бинарная: Преобразуем выходные значения в классы (0 или 1)
-    df_fut['PREDICTION'] = (predictions > 0.5).astype(int)  # Если Sigmoid
+    # df_fut['PREDICTION'] = (predictions > 0.5).astype(int)  # Если Sigmoid
+    df_fut['PREDICTION'] = predictions.argmax(axis=1)  # Выбираем индекс с наибольшей вероятностью (0 или 1)
+
 
     # Выбор строк, где TRADEDATE больше 2024-01-01
     df_test = df_fut[df_fut['TRADEDATE'] > '2024-01-01'].copy()
