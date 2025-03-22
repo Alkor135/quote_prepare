@@ -9,6 +9,9 @@ from torch.utils.data import Dataset, DataLoader
 import os
 from data_read import data_load
 from data_processing import balance_classes, calculate_pnl
+import shutil
+import sys
+sys.dont_write_bytecode = True
 
 # === ФИКСАЦИЯ СЛУЧАЙНЫХ ЧИСЕЛ ===
 def set_seed(seed=42):
@@ -57,27 +60,17 @@ class CandlestickDataset(Dataset):
 
 # === ЗАГРУЗКА ДАННЫХ ===
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
+df = data_load(db_path, '2014-01-01', '2024-01-01')
+
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
 for counter in range(1, 101):
+    # Удаляем папку __pycache__ (если она была создана)
+    shutil.rmtree('__pycache__', ignore_errors=True)
+
     set_seed(counter)
-    df_fut = data_load(db_path, '2014-01-01', '2024-01-01')
-    # features = [f'CI_{i}' for i in range(1, 21)] + [f'VOL_{i}' for i in range(1, 21)] + \
-    #            [f'DAY_W_{i}' for i in range(1, 21)] + [f'DD_{i}' for i in range(1, 21)] + \
-    #            [f'IO_{i}' for i in range(1, 21)] + [f'C-ITM_{i}' for i in range(1, 21)] + \
-    #            [f'C-OTM_{i}' for i in range(1, 21)] + [f'P-ITM_{i}' for i in range(1, 21)] + \
-    #            [f'P-OTM_{i}' for i in range(1, 21)]
-    # X, y = df_fut[features].values, df_fut['DIRECTION'].values
-    # split = int(0.85 * len(y))
-    # X_train, y_train = X[:split], y[:split]
-    # X_test, y_test = X[split:], y[split:]
-    # print(X_train)
-    # X_train, y_train = balance_classes(*X_train.T, y_train)
-    # # X_train, y_train = balance_classes(
-    # #     X_train_candle, X_train_volume, X_train_day, X_train_dd, X_train_io, 
-    # #     X_train_c_itm, X_train_c_otm, X_train_p_itm, X_train_p_otm, y_train
-    # # )
+    df_fut = df.copy()
 
     X_candle = df_fut[[f'CI_{i}' for i in range(1, 21)]].values
     X_volume = df_fut[[f'VOL_{i}' for i in range(1, 21)]].values
