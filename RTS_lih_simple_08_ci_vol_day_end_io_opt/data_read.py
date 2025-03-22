@@ -1,5 +1,4 @@
 import pandas as pd
-from sklearn.utils import resample
 from pathlib import Path
 import numpy as np
 import sqlite3
