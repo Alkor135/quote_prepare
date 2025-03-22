@@ -1,0 +1,187 @@
+"""
+Сохранение 2 графиков (валидационного и тестового) в файл.
+"""
+import torch
+import torch.nn as nn
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import matplotlib.pyplot as plt
+import shutil
+import os
+from data_read import data_load
+
+
+# === ОПРЕДЕЛЕНИЕ МОДЕЛИ LSTM (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
+class CandleLSTM(nn.Module):
+    def __init__(self, vocab_size, embedding_dim, day_vocab_size, day_embedding_dim, hidden_dim, output_dim):
+        super(CandleLSTM, self).__init__()
+        self.embedding_candle = nn.Embedding(vocab_size, embedding_dim)
+        self.embedding_day = nn.Embedding(day_vocab_size, day_embedding_dim)
+        input_dim = embedding_dim + day_embedding_dim + 4
+        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x_candle, x_day, x_c_itm, x_c_otm, x_p_itm, x_p_otm):
+        x_candle = self.embedding_candle(x_candle)
+        x_day = self.embedding_day(x_day.long())
+        x = torch.cat((x_candle, x_day, x_c_itm.unsqueeze(-1), x_c_otm.unsqueeze(-1), x_p_itm.unsqueeze(-1), x_p_otm.unsqueeze(-1)), dim=-1)
+        x, _ = self.lstm(x)
+        x = self.fc(x[:, -1, :])
+        return self.sigmoid(x)
+
+
+# === РАСЧЁТ РЕЗУЛЬТАТОВ ПОСЛЕ ПРОГНОЗА ===
+def calculate_result(row):
+    if pd.isna(row["PREDICTION"]):  # Если NaN 
+        return 0  # Можно удалить или оставить 0
+
+    true_direction = 1 if row["CLOSE"] > row["OPEN"] else 0
+    predicted_direction = row["PREDICTION"]
+
+    difference = abs(row["CLOSE"] - row["OPEN"])
+    return difference if true_direction == predicted_direction else -difference
+
+
+# Установка рабочей директории в папку, где находится файл скрипта
+script_dir = Path(__file__).parent
+os.chdir(script_dir)
+
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
+df = data_load(db_path, '2014-01-01', '2025-03-11')
+
+for counter in range(1, 101):
+    # Удаляем папку __pycache__ (если она была создана)
+    shutil.rmtree('__pycache__', ignore_errors=True)
+
+    # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
+    df_fut = df.query("'2014-01-01' < TRADEDATE < '2024-01-01'").copy()
+
+    # === СОЗДАНИЕ ДАТА ФРЕЙМА С ФИЧАМИ И ТАРГЕТОМ ===
+    feature_candle_columns = [col for col in df_fut.columns if col.startswith('CI_')]
+    feature_day_columns = [col for col in df_fut.columns if col.startswith('DAY_W_')]
+    feature_c_itm_columns = [col for col in df_fut.columns if col.startswith('C-ITM_')]
+    feature_c_otm_columns = [col for col in df_fut.columns if col.startswith('C-OTM_')]
+    feature_p_itm_columns = [col for col in df_fut.columns if col.startswith('P-ITM_')]
+    feature_p_otm_columns = [col for col in df_fut.columns if col.startswith('P-OTM_')]
+
+    X_candle = df_fut[feature_candle_columns].values.astype(np.int64)
+    X_day = df_fut[feature_day_columns].values.astype(np.int64)
+    X_c_itm = df_fut[feature_c_itm_columns].values.astype(np.float32)
+    X_c_otm = df_fut[feature_c_otm_columns].values.astype(np.float32)
+    X_p_itm = df_fut[feature_p_itm_columns].values.astype(np.float32)
+    X_p_otm = df_fut[feature_p_otm_columns].values.astype(np.float32)
+
+    # === ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model_path = Path(fr"model\best_model_{counter}.pth")
+    model = CandleLSTM(27, 8, 7, 4, 128, 1).to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    # === ПОДГОТОВКА ДАННЫХ ДЛЯ ПРЕДСКАЗАНИЯ ===
+    X_candle_tensor = torch.tensor(X_candle, dtype=torch.long).to(device)
+    X_day_tensor = torch.tensor(X_day, dtype=torch.long).to(device)
+    X_c_itm_tensor = torch.tensor(X_c_itm, dtype=torch.float32).to(device)
+    X_c_otm_tensor = torch.tensor(X_c_otm, dtype=torch.float32).to(device)
+    X_p_itm_tensor = torch.tensor(X_p_itm, dtype=torch.float32).to(device)
+    X_p_otm_tensor = torch.tensor(X_p_otm, dtype=torch.float32).to(device)
+
+    # === ПРОГНОЗ ===
+    with torch.no_grad():
+        predictions = model(
+            X_candle_tensor, X_day_tensor, X_c_itm_tensor, X_c_otm_tensor, X_p_itm_tensor, X_p_otm_tensor
+            ).cpu().numpy()
+
+    df_fut['PREDICTION'] = (predictions > 0.5).astype(int)
+
+    # === РАЗДЕЛЕНИЕ НА ВАЛИДАЦИЮ ===
+    split = int(len(df_fut) * 0.85)
+    df_val = df_fut.iloc[split:].copy()
+    df_val["RESULT"] = df_val.apply(calculate_result, axis=1)
+    df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
+
+    # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
+    df_fut = df.query("'2023-01-01' < TRADEDATE < '2025-03-11'").copy()
+
+    # === СОЗДАНИЕ ДАТА ФРЕЙМА С ФИЧАМИ И ТАРГЕТОМ ===
+    feature_candle_columns = [col for col in df_fut.columns if col.startswith('CI_')]
+    feature_day_columns = [col for col in df_fut.columns if col.startswith('DAY_W_')]
+    feature_c_itm_columns = [col for col in df_fut.columns if col.startswith('C-ITM_')]
+    feature_c_otm_columns = [col for col in df_fut.columns if col.startswith('C-OTM_')]
+    feature_p_itm_columns = [col for col in df_fut.columns if col.startswith('P-ITM_')]
+    feature_p_otm_columns = [col for col in df_fut.columns if col.startswith('P-OTM_')]
+
+    X_candle = df_fut[feature_candle_columns].values.astype(np.int64)
+    X_day = df_fut[feature_day_columns].values.astype(np.int64)
+    X_c_itm = df_fut[feature_c_itm_columns].values.astype(np.float32)
+    X_c_otm = df_fut[feature_c_otm_columns].values.astype(np.float32)
+    X_p_itm = df_fut[feature_p_itm_columns].values.astype(np.float32)
+    X_p_otm = df_fut[feature_p_otm_columns].values.astype(np.float32)
+
+    # === ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model_path = Path(fr"model\best_model_{counter}.pth")
+    model = CandleLSTM(27, 8, 7, 4, 128, 1).to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    # === ПОДГОТОВКА ДАННЫХ ДЛЯ ПРЕДСКАЗАНИЯ ===
+    X_candle_tensor = torch.tensor(X_candle, dtype=torch.long).to(device)
+    X_day_tensor = torch.tensor(X_day, dtype=torch.long).to(device)
+    X_c_itm_tensor = torch.tensor(X_c_itm, dtype=torch.float32).to(device)
+    X_c_otm_tensor = torch.tensor(X_c_otm, dtype=torch.float32).to(device)
+    X_p_itm_tensor = torch.tensor(X_p_itm, dtype=torch.float32).to(device)
+    X_p_otm_tensor = torch.tensor(X_p_otm, dtype=torch.float32).to(device)
+
+    # === ПРОГНОЗ ===
+    with torch.no_grad():
+        predictions = model(
+            X_candle_tensor, X_day_tensor, X_c_itm_tensor, X_c_otm_tensor, X_p_itm_tensor, X_p_otm_tensor
+            ).cpu().numpy()
+
+    df_fut['PREDICTION'] = (predictions > 0.5).astype(int)
+
+    # === РАЗДЕЛЕНИЕ НА ТЕСТ где TRADEDATE больше 2024-01-01 ===
+    df_test = df_fut[df_fut['TRADEDATE'] > '2024-01-01'].copy()
+    df_test["RESULT"] = df_test.apply(calculate_result, axis=1)
+    df_test["CUMULATIVE_RESULT"] = df_test["RESULT"].cumsum()
+
+    # === СОХРАНЕНИЕ ГРАФИКОВ === -----------------------------------------------------------------
+    # === ПОСТРОЕНИЕ КУМУЛЯТИВНОГО ГРАФИКА ===
+    # Создание фигуры
+    plt.figure(figsize=(14, 12))
+
+    # Первый подграфик
+    plt.subplot(2, 1, 1)  # (количество строк, количество столбцов, индекс графика)
+    plt.plot(df_val["TRADEDATE"], df_val[f"CUMULATIVE_RESULT"], label="Cumulative Result", 
+             color="b")
+    plt.xlabel("Date")
+    plt.ylabel("Cumulative Result")
+    plt.title(f"Валидация Sum RTS. set_seed={counter}")
+    plt.legend()
+    plt.grid()
+    plt.xticks(df_val["TRADEDATE"][::15], rotation=90)
+
+    # Второй подграфик
+    plt.subplot(2, 1, 2)  # (количество строк, количество столбцов, индекс графика)
+    plt.plot(df_test["TRADEDATE"], df_test[f"CUMULATIVE_RESULT"], label="Cumulative Result", 
+             color="b")
+    plt.xlabel("Date")
+    plt.ylabel("Cumulative Result")
+    plt.title(f"Независимый тест Sum RTS. set_seed={counter}")
+    plt.legend()
+    plt.grid()
+    plt.xticks(df_test["TRADEDATE"][::10], rotation=90)
+
+    # Сохранение графика в файл
+    plt.tight_layout()
+    img_path = Path(fr"chart_2/s_{counter}_RTS.png")
+    plt.savefig(img_path, dpi=300, bbox_inches='tight')
+    print(f"✅ График сохранен в файл: '{img_path}'. Шаг: {counter}")
+    # plt.show()
+    plt.close()  # Закрываем текущую фигуру
+    
