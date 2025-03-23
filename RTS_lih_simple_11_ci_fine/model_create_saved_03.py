@@ -28,119 +28,93 @@ class CandleLSTM(nn.Module):
         return self.sigmoid(x)
 
 class CandlestickDataset(Dataset):
-    def __init__(self, X, y):
+    def __init__(self, X, y, bodies, avg_bodies):
         self.X = torch.tensor(X, dtype=torch.long)
         self.y = torch.tensor(y, dtype=torch.float32)
+        self.bodies = torch.tensor(bodies, dtype=torch.float32)
+        self.avg_bodies = torch.tensor(avg_bodies, dtype=torch.float32)
 
     def __len__(self):
         return len(self.X)
 
     def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
+        return self.X[idx], self.y[idx], self.bodies[idx], self.avg_bodies[idx]
 
-def seed_worker(worker_id):
-    np.random.seed(42 + worker_id)
-    random.seed(42 + worker_id)
+# === Кастомная функция потерь с учетом размера свечи ===
+class CustomLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
 
-# === ФИКСАЦИЯ СЛУЧАЙНЫХ ЧИСЕЛ ДЛЯ ДЕТЕРМИНИРОВАННОСТИ ===
-def set_seed(seed=42):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    def forward(self, y_pred, y_true, candle_bodies, avg_body_20):
+        y_pred_classes = (y_pred > 0.5).float()
+        correct = (y_pred_classes == y_true).float()
+        large_body = (candle_bodies > avg_body_20).float()
 
-# === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
-def encode_candle(row):
-    open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
+        weights = correct * (1 + large_body) + (1 - correct) * (1 + large_body)
+        weights = torch.clamp(weights, min=0.1)  
 
-    if close > open_:
-        direction = 1  # Бычья свеча
-    elif close < open_:
-        direction = 0  # Медвежья свеча
-    else:
-        direction = 2  # Дожи
+        loss = nn.BCELoss(reduction="none")(y_pred, y_true)
+        weighted_loss = loss * weights
 
-    upper_shadow = high - max(open_, close)
-    lower_shadow = min(open_, close) - low
-    body = abs(close - open_)
+        # print(f"Mean loss: {weighted_loss.mean().item()}")  # Для контроля значений
+        return weighted_loss.mean()
 
-    def classify_shadow(shadow, body):
-        if shadow < 0.1 * body:
-            return 0  
-        elif shadow < 0.5 * body:
-            return 1  
-        else:
-            return 2  
-
-    upper_code = classify_shadow(upper_shadow, body)
-    lower_code = classify_shadow(lower_shadow, body)
-
-    return f"{direction}{upper_code}{lower_code}"
-
-# === Функция расчета P/L (по предсказанному направлению) ===
+# === Функция расчета P/L ===
 def calculate_pnl(y_preds, open_prices, close_prices):
     pnl = 0
     for i in range(len(y_preds)):
-        if y_preds[i] > 0.5:  # Покупка (LONG)
+        if y_preds[i] > 0.5:  
             pnl += close_prices[i] - open_prices[i]
-        else:  # Продажа (SHORT)
+        else:  
             pnl += open_prices[i] - close_prices[i]
-    return pnl  # Итоговая прибыль
+    return pnl  
 
-# === 1. ОПРЕДЕЛЕНИЯ ===
-# Установка рабочей директории в папку, где находится файл скрипта
+# === Основная логика ===
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-# === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 df = data_load(db_path, '2014-01-01', '2024-01-01')
 
-for counter in range(101, 501):
-    # Удаляем папку __pycache__ (если она была создана)
+for counter in range(1, 101):
     shutil.rmtree('__pycache__', ignore_errors=True)
 
-    set_seed(counter)  # Устанавливаем одинаковый seed
+    np.random.seed(counter)
+    random.seed(counter)
+    torch.manual_seed(counter)
 
     df_fut = df.copy()
 
-    # Создание дата сетов
     X = df_fut[[f'CI_{i}' for i in range(1, 21)]].values
     y = df_fut['DIRECTION']
-    X, y = np.array(X), np.array(y)
+    bodies = df_fut['BODY']
+    avg_bodies = df_fut['BODY_AVG']
 
-    # Разделение на train/test
+    X, y, bodies, avg_bodies = map(np.array, [X, y, bodies, avg_bodies])
+
     split = int(0.85 * len(X))
     X_train, y_train = X[:split], y[:split]
     X_test, y_test = X[split:], y[split:]
+    bodies_train, bodies_test = bodies[:split], bodies[split:]
+    avg_bodies_train, avg_bodies_test = avg_bodies[:split], avg_bodies[split:]
 
-    # === 4. Балансировка классов === 
-    X_train, y_train = balance_classes(X_train, y_train)
-
-    # === 5. СОЗДАНИЕ DATASET и DATALOADER ===
-    X_test = np.array(X_test, dtype=np.int64)  # Привести к числовому типу
-    y_test = np.array(y_test, dtype=np.int64)  # Привести к числовому типу
-
-    train_dataset = CandlestickDataset(X_train, y_train)
-    test_dataset = CandlestickDataset(X_test, y_test)
-
-    train_loader = DataLoader(
-        train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker
-        )
-    test_loader = DataLoader(
-        test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker
+    X_train, y_train, bodies_train, avg_bodies_train = balance_classes(
+        X_train, y_train, bodies_train, avg_bodies_train
         )
 
-    # === 6. ОБУЧЕНИЕ МОДЕЛИ С ОПТИМИЗАЦИЕЙ ПО P/L ===
+    train_dataset = CandlestickDataset(X_train, y_train, bodies_train, avg_bodies_train)
+    test_dataset = CandlestickDataset(X_test, y_test, bodies_test, avg_bodies_test)
+
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = CandleLSTM(vocab_size=27, embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
-    criterion = nn.BCELoss()
+    criterion = CustomLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    best_pnl = float('-inf')  # Лучшая прибыль (изначально -∞)
+    best_pnl = float('-inf')
     epoch_best_pnl = 0
     model_path = Path(fr"model\best_model_{counter}.pth")
     early_stop_epochs = 200
@@ -150,28 +124,41 @@ for counter in range(101, 501):
     for epoch in range(epochs):
         model.train()
         total_loss = 0
-        for X_batch, y_batch in train_loader:
+        for X_batch, y_batch, bodies_batch, avg_bodies_batch in train_loader:
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            bodies_batch, avg_bodies_batch = bodies_batch.to(device), avg_bodies_batch.to(device)
+
             optimizer.zero_grad()
             y_pred = model(X_batch).squeeze()
-            loss = criterion(y_pred, y_batch)
+
+            # # Проверка предсказаний перед вычислением потерь
+            # print(f"Epoch {epoch + 1} - Sample y_pred (before loss): {y_pred[:5].detach().cpu().numpy()}")
+            # print(f"Epoch {epoch + 1} - Sample y_true: {y_batch[:5].cpu().numpy()}")
+
+            loss = criterion(y_pred, y_batch, bodies_batch, avg_bodies_batch)
+
+            # # Проверка значения loss
+            # print(f"Epoch {epoch + 1} - Loss: {loss.item()}")
+
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
 
-        # === Проверка на тесте после каждой эпохи ===
         model.eval()
         y_preds = []
         
         with torch.no_grad():
-            for X_batch, _ in test_loader:
+            for X_batch, _, _, _ in test_loader:
                 X_batch = X_batch.to(device)
                 y_pred = model(X_batch).squeeze().cpu().numpy()
                 y_preds.extend(y_pred)
 
-        # === Расчет P/L ===
         test_open_prices = df_fut['OPEN'].iloc[split:].values
         test_close_prices = df_fut['CLOSE'].iloc[split:].values
+
+        # # Проверка значений y_preds перед расчетом P/L
+        # print(f"Epoch {epoch + 1} - Sample y_preds: {y_preds[:5]}")
+
         pnl = calculate_pnl(y_preds, test_open_prices, test_close_prices)
 
         print(
@@ -183,29 +170,26 @@ for counter in range(101, 501):
             f"seed: {counter}"
         )
 
-        # === Сохранение лучшей модели по P/L ===
         if pnl > best_pnl:
+            print(f"✅ New Best P/L found: {pnl:.2f} (Previous: {best_pnl:.2f})")
             best_pnl = pnl
             epochs_no_improve = 0
             epoch_best_pnl = epoch + 1
             torch.save(model.state_dict(), model_path)
-            print(f"✅ Model saved with P/L: {best_pnl:.2f}")
         else:
             epochs_no_improve += 1
 
-        # === Ранняя остановка ===
         if epochs_no_improve >= early_stop_epochs:
             print(f"🛑 Early stopping at epoch {epoch + 1}")
             break
 
-    # === 7. ЗАГРУЗКА ЛУЧШЕЙ МОДЕЛИ И ФИНАЛЬНЫЙ ТЕСТ ===
     print("\n🔹 Loading best model for final evaluation...")
     model.load_state_dict(torch.load(model_path))
     model.eval()
 
     y_preds_final = []
     with torch.no_grad():
-        for X_batch, _ in test_loader:
+        for X_batch, _, _, _ in test_loader:
             X_batch = X_batch.to(device)
             y_pred = model(X_batch).squeeze().cpu().numpy()
             y_preds_final.extend(y_pred)
