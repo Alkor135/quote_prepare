@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 import os
-from data_read import balance_classes
+from data_processing import balance_classes
 from candle_code import candle_code
 import shutil
 import sys
@@ -55,35 +55,6 @@ def set_seed(seed=42):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-
-# # === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
-# def encode_candle(row):
-#     open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
-
-#     if close > open_:
-#         direction = 1  # Бычья свеча
-#     elif close < open_:
-#         direction = 0  # Медвежья свеча
-#     else:
-#         direction = 2  # Дожи
-
-#     upper_shadow = high - max(open_, close)
-#     lower_shadow = min(open_, close) - low
-#     body = abs(close - open_)
-
-#     def classify_shadow(shadow, body):
-#         if shadow < 0.1 * body:
-#             return 0  
-#         elif shadow < 0.5 * body:
-#             return 1  
-#         else:
-#             return 2  
-
-#     upper_code = classify_shadow(upper_shadow, body)
-#     lower_code = classify_shadow(lower_shadow, body)
-
-#     return f"{direction}{upper_code}{lower_code}"
 
 
 # === Функция расчета P/L (по предсказанному направлению) ===

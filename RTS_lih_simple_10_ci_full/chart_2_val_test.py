@@ -8,40 +8,10 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 import os
-from data_read import data_load
+from candle_code import candle_code
 import shutil
 import sys
 sys.dont_write_bytecode = True
-
-
-# === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
-def encode_candle(row):
-    open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
-
-    if close > open_:
-        direction = 1  # Бычья свеча
-    elif close < open_:
-        direction = 0  # Медвежья свеча
-    else:
-        direction = 2  # Дожи
-
-    upper_shadow = high - max(open_, close)
-    lower_shadow = min(open_, close) - low
-    body = abs(close - open_)
-
-    def classify_shadow(shadow, body):
-        if shadow < 0.1 * body:
-            return 0  
-        elif shadow < 0.5 * body:
-            return 1  
-        else:
-            return 2  
-
-    upper_code = classify_shadow(upper_shadow, body)
-    lower_code = classify_shadow(lower_shadow, body)
-
-    return f"{direction}{upper_code}{lower_code}"
-
 
 # === ОПРЕДЕЛЕНИЕ МОДЕЛИ (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
 class CandleLSTM(nn.Module):
@@ -82,7 +52,7 @@ for counter in range(1, 101):
     shutil.rmtree('__pycache__', ignore_errors=True)
     
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
-    df_fut = data_load(db_path, '2014-01-01', '2024-01-01')
+    df_fut = candle_code(db_path, '2014-01-01', '2024-01-01')
 
     df_fut = df_fut.dropna().reset_index(drop=True)
 
@@ -118,7 +88,7 @@ for counter in range(1, 101):
     df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
 
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
-    df_fut = data_load(db_path, '2023-01-01', '2025-03-10')
+    df_fut = candle_code(db_path, '2023-01-01', '2025-03-10')
 
     df_fut = df_fut.dropna().reset_index(drop=True)
 
