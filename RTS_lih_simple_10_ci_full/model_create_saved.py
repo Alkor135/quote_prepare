@@ -114,7 +114,7 @@ for counter in range(1, 101):
     # === 6. ОБУЧЕНИЕ МОДЕЛИ С ОПТИМИЗАЦИЕЙ ПО P/L ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = CandleLSTM(vocab_size=128, embedding_dim=8, hidden_dim=128, output_dim=1).to(device)
+    model = CandleLSTM(vocab_size=128, embedding_dim=16, hidden_dim=128, output_dim=1).to(device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 

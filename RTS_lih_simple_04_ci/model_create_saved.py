@@ -101,16 +101,17 @@ def calculate_pnl(y_preds, open_prices, close_prices):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
+# === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
+df = data_load(db_path, '2014-01-01', '2024-01-01')
 
-for counter in range(1, 101):
+for counter in range(101, 501):
     # Удаляем папку __pycache__ (если она была создана)
     shutil.rmtree('__pycache__', ignore_errors=True)
 
     set_seed(counter)  # Устанавливаем одинаковый seed
 
-    # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
-    df_fut = data_load(db_path, '2014-01-01', '2024-01-01')
+    df_fut = df.copy()
 
     # Создание дата сетов
     X = df_fut[[f'CI_{i}' for i in range(1, 21)]].values

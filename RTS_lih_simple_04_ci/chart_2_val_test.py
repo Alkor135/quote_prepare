@@ -77,7 +77,7 @@ os.chdir(script_dir)
 
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 
-for counter in range(1, 101):
+for counter in range(1, 201):
     # Удаляем папку __pycache__ (если она была создана)
     shutil.rmtree('__pycache__', ignore_errors=True)
     
@@ -118,7 +118,7 @@ for counter in range(1, 101):
     df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
 
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
-    df_fut = data_load(db_path, '2023-01-01', '2025-03-10')
+    df_fut = data_load(db_path, '2023-01-01', '2025-03-11')
 
     df_fut = df_fut.dropna().reset_index(drop=True)
 
@@ -168,7 +168,7 @@ for counter in range(1, 101):
     plt.title(f"Валидация Sum RTS. set_seed={counter}")
     plt.legend()
     plt.grid()
-    plt.xticks(df_val["TRADEDATE"][::15], rotation=90)
+    plt.xticks(df_val["TRADEDATE"][::10], rotation=90)
 
     # Второй подграфик
     plt.subplot(2, 1, 2)  # (количество строк, количество столбцов, индекс графика)

@@ -60,7 +60,7 @@ for counter in range(1, 101):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model_path = Path(fr"model\best_model_{counter}.pth")
-    model = CandleLSTM(vocab_size=128, embedding_dim=8, hidden_dim=128, output_dim=1).to(device)
+    model = CandleLSTM(vocab_size=128, embedding_dim=16, hidden_dim=128, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
@@ -88,7 +88,7 @@ for counter in range(1, 101):
     df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
 
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
-    df_fut = candle_code(db_path, '2023-01-01', '2025-03-10')
+    df_fut = candle_code(db_path, '2023-01-01', '2025-03-11')
 
     df_fut = df_fut.dropna().reset_index(drop=True)
 
@@ -96,7 +96,7 @@ for counter in range(1, 101):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model_path = Path(fr"model\best_model_{counter}.pth")
-    model = CandleLSTM(vocab_size=128, embedding_dim=8, hidden_dim=128, output_dim=1).to(device)
+    model = CandleLSTM(vocab_size=128, embedding_dim=16, hidden_dim=128, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
