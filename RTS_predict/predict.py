@@ -50,11 +50,11 @@ if __name__ == '__main__':
     os.chdir(script_dir)
 
     db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
-    n = 100  # Количество последних строк
+    start_date = '2024-11-01'  # Начальная дата
     model_1_path = Path(fr"model\best_model_3.pth")
     model_2_path = Path(fr"model\best_model_69.pth")
 
-    df = data_load(db_path, n)
+    df = data_load(db_path, start_date)
     df = df.tail(1)  # Взять последнюю запись (для предсказаний)
     df['TRADEDATE'] = pd.to_datetime(df['TRADEDATE'])
 
