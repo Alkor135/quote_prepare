@@ -106,7 +106,9 @@ def data_load(db_path, start_date):
     for col in [f'CI_{i}' for i in range(1, 21)]:
         df_fut[col] = pd.to_numeric(df_fut[col], errors='coerce').fillna(0).astype(np.int64)
 
-    df_fut['DIRECTION'] = pd.to_numeric(df_fut['DIRECTION'], errors='coerce').fillna(0).astype(np.int64)
+    df_fut['DIRECTION'] = pd.to_numeric(
+        df_fut['DIRECTION'], errors='coerce'
+        ).fillna(0).astype(np.int64)
 
     df_fut = df_fut.copy()
 
