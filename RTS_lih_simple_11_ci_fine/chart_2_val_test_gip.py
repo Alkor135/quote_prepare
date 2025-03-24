@@ -13,7 +13,6 @@ import shutil
 import sys
 sys.dont_write_bytecode = True
 
-
 # === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
 def encode_candle(row):
     open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
@@ -42,7 +41,6 @@ def encode_candle(row):
 
     return f"{direction}{upper_code}{lower_code}"
 
-
 # === ОПРЕДЕЛЕНИЕ МОДЕЛИ (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
 class CandleLSTM(nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
@@ -58,7 +56,6 @@ class CandleLSTM(nn.Module):
         x = self.fc(x[:, -1, :])
         return self.sigmoid(x)
 
-
 # === РАСЧЁТ РЕЗУЛЬТАТОВ ПОСЛЕ ПРОГНОЗА ===
 def calculate_result(row):
     if pd.isna(row["PREDICTION"]):  # Если NaN 
@@ -70,17 +67,28 @@ def calculate_result(row):
     difference = abs(row["CLOSE"] - row["OPEN"])
     return difference if true_direction == predicted_direction else -difference
 
-
 # Установка рабочей директории в папку, где находится файл скрипта
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
+directory_model = Path(r'model_gip')
 
-for counter in range(1, 101):
+for file in directory_model.iterdir():
+    if file.name.startswith('best_model_'):
+        model_path = Path(fr"model_gip\{file.name}")
+        # Преобразуем имя файла в строку и удаляем расширение
+        file_name = str(file.name).replace(".pth", "").replace("best_model_", "")
+
+        # Разбиваем строку по "_"
+        values = file_name.split("_")
+
+        # Преобразуем значения в соответствующие типы
+        val1, val2, val3, val4 = int(values[0]), int(values[1]), int(values[2]), float(values[3])
+
     # Удаляем папку __pycache__ (если она была создана)
     shutil.rmtree('__pycache__', ignore_errors=True)
-    
+        
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
     df_fut = data_load(db_path, '2014-01-01', '2024-01-01')
 
@@ -89,8 +97,8 @@ for counter in range(1, 101):
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = Path(fr"model\best_model_{counter}.pth")
-    model = CandleLSTM(vocab_size=27, embedding_dim=32, hidden_dim=32, output_dim=1).to(device)
+    # model_path = Path(fr"model\best_model_{counter}.pth")
+    model = CandleLSTM(vocab_size=27, embedding_dim=val1, hidden_dim=val2, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
@@ -125,8 +133,8 @@ for counter in range(1, 101):
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = Path(fr"model\best_model_{counter}.pth")
-    model = CandleLSTM(vocab_size=27, embedding_dim=32, hidden_dim=32, output_dim=1).to(device)
+    # model_path = Path(fr"model\best_model_{counter}.pth")
+    model = CandleLSTM(vocab_size=27, embedding_dim=val1, hidden_dim=val2, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
@@ -165,7 +173,7 @@ for counter in range(1, 101):
              color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
-    plt.title(f"Валидация Sum RTS. set_seed={counter}")
+    plt.title(f"Валидация Sum RTS. file={file.name}")
     plt.legend()
     plt.grid()
     plt.xticks(df_val["TRADEDATE"][::10], rotation=90)
@@ -176,14 +184,14 @@ for counter in range(1, 101):
              color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
-    plt.title(f"Независимый тест Sum RTS. set_seed={counter}")
+    plt.title(f"Независимый тест Sum RTS. file={file.name}")
     plt.legend()
     plt.grid()
     plt.xticks(df_test["TRADEDATE"][::10], rotation=90)
 
     # Сохранение графика в файл
     plt.tight_layout()
-    img_path = Path(fr"chart_2/s_{counter}_RTS.png")
+    img_path = Path(fr"chart_2_gip/s_{file.name}_RTS.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}'")
     # plt.show()
