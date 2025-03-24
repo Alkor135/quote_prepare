@@ -108,13 +108,6 @@ def encode_candle(row):
     return f"{direction}{upper_code}{lower_code}"
 
 
-# def normalize(series):
-#     """ Функция нормализации от 0 до 1 """
-#     if len(series) == 0:  # если нет данных, возвращаем NaN
-#         return None
-#     return (series.iloc[-1] - series.min()) / (series.max() - series.min()) if series.max() != series.min() else 0
-
-
 def data_load(db_path, start_date, end_date):
     # Чтение данных по фьючерсам
     query = """
