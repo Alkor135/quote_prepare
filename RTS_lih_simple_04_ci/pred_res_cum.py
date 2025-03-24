@@ -18,35 +18,6 @@ import sys
 sys.dont_write_bytecode = True
 
 
-# # === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
-# def encode_candle(row):
-#     open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
-
-#     if close > open_:
-#         direction = 1  # Бычья свеча
-#     elif close < open_:
-#         direction = 0  # Медвежья свеча
-#     else:
-#         direction = 2  # Дожи
-
-#     upper_shadow = high - max(open_, close)
-#     lower_shadow = min(open_, close) - low
-#     body = abs(close - open_)
-
-#     def classify_shadow(shadow, body):
-#         if shadow < 0.1 * body:
-#             return 0  
-#         elif shadow < 0.5 * body:
-#             return 1  
-#         else:
-#             return 2  
-
-#     upper_code = classify_shadow(upper_shadow, body)
-#     lower_code = classify_shadow(lower_shadow, body)
-
-#     return f"{direction}{upper_code}{lower_code}"
-
-
 # === СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
 class CandleLSTM(nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
@@ -79,13 +50,11 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
 data_path = Path(fr"pred_res_cum.csv")
 df_data = pd.DataFrame()
 
-for counter in range(1, 101):
-    # ---------------------------------------------------------------------------------------------
+for counter in range(1, 101):  # ------------------------------------------------------------------
     # Удаляем папку __pycache__ (если она была создана)
     shutil.rmtree('__pycache__', ignore_errors=True)
 
@@ -94,7 +63,7 @@ for counter in range(1, 101):
 
     df_fut = df_fut.dropna().reset_index(drop=True)
 
-    window_size = 20
+    # window_size = 20
 
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -159,7 +128,3 @@ for counter in range(1, 101):
     df_data.to_csv(data_path, index=False)
     print(f"✅ Данные сохранены в файл: '{data_path}', {counter=}")
     # print(df_data)
-
-# df_data.drop(columns=[f'CI_{i}' for i in range(1, 21)], inplace=True)
-# df_data.to_csv(data_path, index=False)
-# print(f"✅ Финальное сохранение в файл: '{data_path}', {counter=}")
