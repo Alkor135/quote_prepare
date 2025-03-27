@@ -46,7 +46,7 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\MIX_futures_options_day_2014.db')
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\Si_futures_options_day_2014.db')
 
 for counter in range(1, 101):
     # Удаляем папку __pycache__ (если она была создана)
@@ -135,7 +135,7 @@ for counter in range(1, 101):
              color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
-    plt.title(f"Валидация Sum MIX. set_seed={counter}")
+    plt.title(f"Валидация Sum Si. set_seed={counter}")
     plt.legend()
     plt.grid()
     plt.xticks(df_val["TRADEDATE"][::10], rotation=90)
@@ -146,14 +146,14 @@ for counter in range(1, 101):
              color="b")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Result")
-    plt.title(f"Независимый тест Sum MIX. set_seed={counter}")
+    plt.title(f"Независимый тест Sum Si. set_seed={counter}")
     plt.legend()
     plt.grid()
     plt.xticks(df_test["TRADEDATE"][::10], rotation=90)
 
     # Сохранение графика в файл
     plt.tight_layout()
-    img_path = Path(fr"chart_2/s_{counter}_MIX.png")
+    img_path = Path(fr"chart_2/s_{counter}.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}'")
     # plt.show()
