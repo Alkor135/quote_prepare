@@ -73,9 +73,9 @@ if __name__ == '__main__':
     script_dir = Path(__file__).parent
     os.chdir(script_dir)
 
-    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
+    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_day_2014.db')
     # Путь к CSV-файлу с результатами
-    csv_file_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_results.csv')
+    csv_file_path = Path(r'RTS_results.csv')
     start_date = '2024-11-01'  # Начальная дата
     model_1_path = Path(fr"model\best_model_3.pth")
     model_2_path = Path(fr"model\best_model_69.pth")

@@ -15,6 +15,7 @@ import os
 from data_read import data_load
 import shutil
 import sys
+from datetime import datetime
 sys.dont_write_bytecode = True
 
 
@@ -59,7 +60,9 @@ for counter in range(1, 101):  # -----------------------------------------------
     shutil.rmtree('__pycache__', ignore_errors=True)
 
     # === 1. ЗАГРУЗКА ДАННЫХ ===
-    df_fut = data_load(db_path, '2023-01-01', '2025-03-11')
+    # df_fut = data_load(db_path, '2023-01-01', '2025-03-11')
+    end_date = datetime.now().date().strftime("%Y-%m-%d")
+    df_fut = data_load(db_path, '2023-01-01', end_date)
 
     df_fut = df_fut.dropna().reset_index(drop=True)
 
