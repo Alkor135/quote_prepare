@@ -14,35 +14,6 @@ import sys
 sys.dont_write_bytecode = True
 
 
-# # === ФУНКЦИЯ КОДИРОВАНИЯ СВЕЧЕЙ (ЛИХОВИДОВ) ===
-# def encode_candle(row):
-#     open_, low, high, close = row['OPEN'], row['LOW'], row['HIGH'], row['CLOSE']
-
-#     if close > open_:
-#         direction = 1  # Бычья свеча
-#     elif close < open_:
-#         direction = 0  # Медвежья свеча
-#     else:
-#         direction = 2  # Дожи
-
-#     upper_shadow = high - max(open_, close)
-#     lower_shadow = min(open_, close) - low
-#     body = abs(close - open_)
-
-#     def classify_shadow(shadow, body):
-#         if shadow < 0.1 * body:
-#             return 0  
-#         elif shadow < 0.5 * body:
-#             return 1  
-#         else:
-#             return 2  
-
-#     upper_code = classify_shadow(upper_shadow, body)
-#     lower_code = classify_shadow(lower_shadow, body)
-
-#     return f"{direction}{upper_code}{lower_code}"
-
-
 # === ОПРЕДЕЛЕНИЕ МОДЕЛИ (ДОЛЖНА СОВПАДАТЬ С ОБУЧЕННОЙ) ===
 class CandleLSTM(nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
@@ -75,7 +46,7 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_day_2014.db')
 
 for counter in range(1, 101):
     # Удаляем папку __pycache__ (если она была создана)
