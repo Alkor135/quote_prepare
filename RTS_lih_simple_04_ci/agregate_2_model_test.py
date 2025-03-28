@@ -34,8 +34,8 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-# [3, 69] 29, 30, 34, 53, 62, 69, 72
-first_model = 3
+# [24, 69]
+first_model = 24
 second_model = 69
 
 # === ЗАГРУЗКА ФАЙЛА ===
