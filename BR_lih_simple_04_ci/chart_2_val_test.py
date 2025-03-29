@@ -155,7 +155,7 @@ for counter in range(1, 101):
 
     # Сохранение графика в файл
     plt.tight_layout()
-    img_path = Path(fr"chart_2/s_{counter}.png")
+    img_path = Path(fr"chart_2/s_{counter}_BR.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}'")
     # plt.show()
