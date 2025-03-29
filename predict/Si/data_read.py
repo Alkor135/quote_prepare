@@ -120,7 +120,7 @@ if __name__ == '__main__':
     script_dir = Path(__file__).parent
     os.chdir(script_dir)
 
-    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
+    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\Si_day_2014.db')
     start_date = '2023-01-01'  # Начальная дата
 
     df_fut = data_load(db_path, start_date)

@@ -55,15 +55,15 @@ def save_results(csv_file_path, results):
 
         # Проверяем, есть ли записи с такой датой
         if df['TRADEDATE'].iloc[-1] in existing_data['TRADEDATE'].values:
-            print(f"Записи с датой {df['TRADEDATE'].iloc[-1].date()} уже существуют в файле.")
+            print(f"📌 RTS. Записи с датой {df['TRADEDATE'].iloc[-1].date()} уже существуют в файле.")
         else:
             # Дописываем новый DataFrame в файл
             results.to_csv(csv_file_path, mode='a', header=False, index=False)
-            print(f"Результаты добавлены в файл {csv_file_path}.")
+            print(f"📌 RTS. Результаты добавлены в файл {csv_file_path}.")
     else:
         # Если файл не существует, создаем его и записываем данные
         results.to_csv(csv_file_path, index=False)
-        print(f"Файл {csv_file_path} создан и данные записаны.")
+        print(f"📌 RTS. Файл {csv_file_path} создан и данные записаны.")
 
     print(results.tail(10))  # Выводим последние записи
 
