@@ -37,8 +37,8 @@ os.chdir(script_dir)
 # Удаляем папку __pycache__ (если она была создана)
 shutil.rmtree('__pycache__', ignore_errors=True)
 
-# [9, 70]
-first_model = 9
+# [69, 70]
+first_model = 69
 second_model = 70
 
 # === ЗАГРУЗКА ФАЙЛА ===

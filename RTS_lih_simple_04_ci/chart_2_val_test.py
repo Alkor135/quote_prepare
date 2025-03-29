@@ -91,7 +91,6 @@ for counter in range(1, 101):
 
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
     end_date = datetime.now().date().strftime("%Y-%m-%d")
-    # df_fut = data_load(db_path, '2023-01-01', '2025-03-11')
     df_fut = data_load(db_path, '2023-01-01', end_date)
 
     df_fut = df_fut.dropna().reset_index(drop=True)

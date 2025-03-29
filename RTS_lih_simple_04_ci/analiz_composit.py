@@ -22,29 +22,34 @@ os.chdir(script_dir)
 pd.reset_option('^display.', silent=True)
 
 
-# Функция расчета максимальной просадки
+# Функция расчета максимальной просадки (относительной и абсолютной)
 def max_drawdown(cum_returns):
     peak = np.maximum.accumulate(cum_returns)
-    drawdown = (cum_returns - peak) / peak
-    return drawdown.min()
+    drawdown = cum_returns - peak  # Абсолютная просадка
+    relative_drawdown = drawdown / peak  # Относительная просадка
+    return relative_drawdown.min(), drawdown.min()  # Возвращаем обе метрики
 
 
 # Улучшенная функция CAGR (учитывает даты если есть в индексе)
 def cagr(cum_returns):
-    if len(cum_returns) < 2:
-        return np.nan
-
     start_value = cum_returns.iloc[0]
     end_value = cum_returns.iloc[-1]
 
+    # Проверяем, что начальное и конечное значения больше 0
     if start_value <= 0 or end_value <= 0:
-        return np.nan
+        return -1  # Возвращаем -1, чтобы указать на некорректные данные
 
+    # Рассчитываем количество лет
     if isinstance(cum_returns.index, pd.DatetimeIndex):
         years = (cum_returns.index[-1] - cum_returns.index[0]).days / 365.25
     else:
         years = len(cum_returns) / 252
 
+    # Проверяем, что количество лет больше 0
+    if years <= 0:
+        return -1
+
+    # Рассчитываем CAGR
     return (end_value / start_value) ** (1 / years) - 1
 
 
@@ -53,7 +58,13 @@ def smoothness_r2(cum_returns):
     X = np.arange(len(cum_returns)).reshape(-1, 1)
     y = cum_returns.values.reshape(-1, 1)
     model = LinearRegression().fit(X, y)
-    return model.score(X, y)
+    r2 = model.score(X, y)
+
+    # Если кривая убывает, делаем R² отрицательным
+    if cum_returns.iloc[-1] > cum_returns.iloc[0]:
+        r2 = -r2
+
+    return r2
 
 
 # Коэффициент восстановления: CAGR / |Max Drawdown|
@@ -63,10 +74,17 @@ def recovery_factor(cagr_value, mdd):
 
 # Коэффициент Шарпа: Средняя доходность / Стандартное отклонение * sqrt(252)
 def sharpe_ratio(daily_returns, risk_free_rate=0.0, periods_per_year=252):
-    # Убираем NaN значения из доходностей
-    daily_returns = daily_returns.dropna()
+    # # Убираем NaN значения из доходностей
+    # daily_returns = daily_returns.dropna()
 
-    # Если после удаления NaN остались данные, считаем
+    # # Если после удаления NaN остались данные, считаем
+    # if daily_returns.std() > 0:
+    #     excess_returns = daily_returns - risk_free_rate
+    #     return excess_returns.mean() / excess_returns.std() * np.sqrt(periods_per_year)
+    # else:
+    #     return np.nan
+
+    daily_returns = daily_returns.replace([np.inf, -np.inf], np.nan).dropna()
     if daily_returns.std() > 0:
         excess_returns = daily_returns - risk_free_rate
         return excess_returns.mean() / excess_returns.std() * np.sqrt(periods_per_year)
@@ -76,15 +94,23 @@ def sharpe_ratio(daily_returns, risk_free_rate=0.0, periods_per_year=252):
 
 # Коэффициент Сортино: Средняя доходность / Downside Std * sqrt(252)
 def sortino_ratio(daily_returns, risk_free_rate=0.0, periods_per_year=252):
-    # Убираем NaN значения из доходностей
-    daily_returns = daily_returns.dropna()
+    # # Убираем NaN значения из доходностей
+    # daily_returns = daily_returns.dropna()
 
-    # Если после удаления NaN остались данные, считаем
+    # # Если после удаления NaN остались данные, считаем
+    # if len(daily_returns[daily_returns < 0]) > 0:
+    #     excess_returns = daily_returns - risk_free_rate
+    #     downside_std = excess_returns[excess_returns < 0].std()
+    #     return excess_returns.mean() / downside_std * np.sqrt(
+    #         periods_per_year) if downside_std > 0 else np.nan
+    # else:
+    #     return np.nan
+
+    daily_returns = daily_returns.replace([np.inf, -np.inf], np.nan).dropna()
     if len(daily_returns[daily_returns < 0]) > 0:
         excess_returns = daily_returns - risk_free_rate
         downside_std = excess_returns[excess_returns < 0].std()
-        return excess_returns.mean() / downside_std * np.sqrt(
-            periods_per_year) if downside_std > 0 else np.nan
+        return excess_returns.mean() / downside_std * np.sqrt(periods_per_year) if downside_std > 0 else np.nan
     else:
         return np.nan
 
@@ -93,6 +119,17 @@ def sortino_ratio(daily_returns, risk_free_rate=0.0, periods_per_year=252):
 df = pd.read_csv("pred_res_cum.csv", index_col=0, parse_dates=True)
 
 df = df.loc[:, df.columns.str.startswith('CUM')]
+
+# Заменяем значения в строке с индексом 0 на 0 для колонок, начинающихся с 'CUM'
+# Получаем дату из индекса нулевой строки
+first_date = df.index[0]  # Индекс первой строки
+# Проверяем, существует ли строка с этой датой
+if first_date in df.index:
+    # Записываем нули в колонки, начинающиеся с 'CUM'
+    df.loc[first_date, df.filter(like='CUM').columns] = 0
+else:
+    print(f"Дата {first_date} отсутствует в индексе DataFrame.")
+print(df)
 
 # Расчет метрик для каждой модели
 results = []
@@ -107,22 +144,24 @@ for column in df.columns:
     # Приводим к дневным доходностям
     daily_returns = cum_returns.pct_change().dropna()
 
-    mdd = max_drawdown(cum_returns)
+    # Расчет метрик
+    relative_mdd, absolute_mdd = max_drawdown(cum_returns)  # Получаем обе просадки
     growth = cagr(cum_returns)
     smoothness = smoothness_r2(cum_returns)
-    recovery = recovery_factor(growth, mdd)
+    recovery = recovery_factor(growth, relative_mdd)
     sharpe = sharpe_ratio(daily_returns)
     sortino = sortino_ratio(daily_returns)
 
-    if abs(mdd) > 1e-6:
-        composite_index = (0.3 * growth / abs(mdd)) + (0.2 * smoothness) + (
+    if abs(relative_mdd) > 1e-6:
+        composite_index = (0.3 * growth / abs(relative_mdd)) + (0.2 * smoothness) + (
                     0.2 * cum_returns.max()) + (0.2 * sharpe) + (0.1 * sortino)
     else:
         composite_index = None
 
     results.append({
         "Model": column,
-        "Max Drawdown": mdd,
+        "Max Drawdown (Relative)": relative_mdd,
+        "Max Drawdown (Absolute)": absolute_mdd,
         "CAGR": growth,
         "Smoothness R²": smoothness,
         "Recovery Factor": recovery,
@@ -134,7 +173,10 @@ for column in df.columns:
 
 # Вывод отсортированного списка моделей по композитному индексу
 # df_results = pd.DataFrame(results).sort_values(by="Composite Index", ascending=False)
-df_results = pd.DataFrame(results).sort_values(by="Max Profit", ascending=False)
+# df_results = pd.DataFrame(results).sort_values(by="Max Profit", ascending=False)
+# df_results = pd.DataFrame(results).sort_values(by="Max Drawdown (Absolute)", ascending=False)
+# df_results = pd.DataFrame(results).sort_values(by="Sortino Ratio", ascending=False)
+df_results = pd.DataFrame(results).sort_values(by="Smoothness R²", ascending=False)
 
 df_results = df_results.round(4).fillna("-")
 
