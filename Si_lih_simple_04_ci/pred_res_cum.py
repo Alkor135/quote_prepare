@@ -15,6 +15,7 @@ import os
 from data_read import data_load
 import shutil
 import sys
+from datetime import datetime
 sys.dont_write_bytecode = True
 
 
@@ -50,7 +51,7 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\Si_futures_options_day_2014.db')
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\Si_day_2014.db')
 data_path = Path(fr"pred_res_cum.csv")
 df_data = pd.DataFrame()
 
@@ -59,11 +60,10 @@ for counter in range(1, 101):  # -----------------------------------------------
     shutil.rmtree('__pycache__', ignore_errors=True)
 
     # === 1. ЗАГРУЗКА ДАННЫХ ===
-    df_fut = data_load(db_path, '2023-01-01', '2025-03-25')
+    end_date = datetime.now().date().strftime("%Y-%m-%d")
+    df_fut = data_load(db_path, '2023-01-01', end_date)
 
     df_fut = df_fut.dropna().reset_index(drop=True)
-
-    # window_size = 20
 
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

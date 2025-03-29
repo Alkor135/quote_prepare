@@ -11,6 +11,7 @@ import os
 from data_read import data_load
 import shutil
 import sys
+from datetime import datetime
 sys.dont_write_bytecode = True
 
 
@@ -46,7 +47,7 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\Si_futures_options_day_2014.db')
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\Si_day_2014.db')
 
 for counter in range(1, 101):
     # Удаляем папку __pycache__ (если она была создана)
@@ -89,7 +90,8 @@ for counter in range(1, 101):
     df_val["CUMULATIVE_RESULT"] = df_val["RESULT"].cumsum()
 
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
-    df_fut = data_load(db_path, '2023-01-01', '2025-03-25')
+    end_date = datetime.now().date().strftime("%Y-%m-%d")
+    df_fut = data_load(db_path, '2023-01-01', end_date)
 
     df_fut = df_fut.dropna().reset_index(drop=True)
 
@@ -153,7 +155,7 @@ for counter in range(1, 101):
 
     # Сохранение графика в файл
     plt.tight_layout()
-    img_path = Path(fr"chart_2/s_{counter}.png")
+    img_path = Path(fr"chart_2/s_{counter}_Si.png")
     plt.savefig(img_path, dpi=300, bbox_inches='tight')
     print(f"✅ График сохранен в файл: '{img_path}'")
     # plt.show()
