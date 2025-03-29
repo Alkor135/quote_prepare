@@ -71,7 +71,7 @@ script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
 # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
-db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\BR_futures_options_day_2014.db')
+db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\BR_day_2014.db')
 df = data_load(db_path, '2014-01-01', '2024-01-01')
 
 for counter in range(1, 101):
