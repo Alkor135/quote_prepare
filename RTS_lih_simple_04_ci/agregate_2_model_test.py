@@ -34,9 +34,9 @@ def calculate_result(row):
 script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
-# [24, 69]
-first_model = 24
-second_model = 69
+# [24, 69] 3
+first_model = 3
+second_model = 62
 
 # === ЗАГРУЗКА ФАЙЛА ===
 df = pd.read_csv(r"pred_res_cum.csv")
