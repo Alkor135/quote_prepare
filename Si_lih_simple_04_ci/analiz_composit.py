@@ -174,12 +174,12 @@ for column in df.columns:
 
 # Вывод отсортированного списка моделей по композитному индексу
 # df_results = pd.DataFrame(results).sort_values(by="Composite Index", ascending=False)
-df_results = pd.DataFrame(results).sort_values(by="Profit", ascending=False)
+# df_results = pd.DataFrame(results).sort_values(by="Profit", ascending=False)
 # df_results = pd.DataFrame(results).sort_values(by="Max Drawdown (Absolute)", ascending=False)
 # df_results = pd.DataFrame(results).sort_values(by="Sortino Ratio", ascending=False)
-# df_results = pd.DataFrame(results).sort_values(by="Smoothness R²", ascending=False)
+df_results = pd.DataFrame(results).sort_values(by="Smoothness R²", ascending=False)
 
 df_results = df_results.round(4).fillna("-")
 
 # print(df_results.to_string(index=False))
-print(df_results.head(20).to_string(max_rows=20, max_cols=20))
+print(df_results.head(10).to_string(max_rows=20, max_cols=20))

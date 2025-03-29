@@ -38,8 +38,8 @@ os.chdir(script_dir)
 shutil.rmtree('__pycache__', ignore_errors=True)
 
 # [61, 70]
-first_model = 61
-second_model = 70
+first_model = 67
+second_model = 73
 
 # === ЗАГРУЗКА ФАЙЛА ===
 df = pd.read_csv(r"pred_res_cum.csv")

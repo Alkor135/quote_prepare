@@ -37,9 +37,9 @@ os.chdir(script_dir)
 # Удаляем папку __pycache__ (если она была создана)
 shutil.rmtree('__pycache__', ignore_errors=True)
 
-# [88, 61] 20 
-first_model = 20
-second_model = 61
+# [88, 73] 20 
+first_model = 73
+second_model = 88
 
 # === ЗАГРУЗКА ФАЙЛА ===
 df = pd.read_csv(r"pred_res_cum.csv")
