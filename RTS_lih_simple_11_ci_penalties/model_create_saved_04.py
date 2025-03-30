@@ -94,11 +94,23 @@ class CustomLoss(nn.Module):
 def calculate_pnl(y_preds, open_prices, close_prices):
     pnl = 0
     for i in range(len(y_preds)):
-        if y_preds[i] > 0.5:  
-            pnl += close_prices[i] - open_prices[i]
-        else:  
-            pnl += open_prices[i] - close_prices[i]
-    return pnl  
+        difference = abs(close_prices[i] - open_prices[i])  # Размер свечи
+
+        # Весовые коэффициенты
+        weight_correct = 2  # Усиление поощрения за правильный прогноз
+        weight_incorrect = 2  # Усиление штрафа за неправильный прогноз
+
+        if y_preds[i] > 0.5:  # Прогноз роста
+            if close_prices[i] > open_prices[i]:  # Реальный рост
+                pnl += weight_correct * difference  # Усиленное поощрение
+            else:  # Реальное падение
+                pnl -= weight_incorrect * difference  # Усиленный штраф
+        else:  # Прогноз падения
+            if close_prices[i] < open_prices[i]:  # Реальное падение
+                pnl += weight_correct * difference  # Усиленное поощрение
+            else:  # Реальный рост
+                pnl -= weight_incorrect * difference  # Усиленный штраф
+    return pnl
 
 # === Основная логика ===
 script_dir = Path(__file__).parent
@@ -147,7 +159,7 @@ for counter in range(1, 101):
 
     best_pnl = float('-inf')
     epoch_best_pnl = 0
-    model_path = Path(fr"model\best_model_{counter}.pth")
+    model_path = Path(fr"model_04\best_model_{counter}.pth")
     early_stop_epochs = 200
     epochs_no_improve = 0
 

@@ -175,7 +175,7 @@ if __name__ == '__main__':
     script_dir = Path(__file__).parent
     os.chdir(script_dir)
 
-    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_futures_options_day_2014.db')
+    db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_day_2014.db')
 
     # Переменные с датами
     start_date = '2014-01-01'

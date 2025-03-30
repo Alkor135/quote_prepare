@@ -39,7 +39,7 @@ first_model = 65
 second_model = 28
 
 # === ЗАГРУЗКА ФАЙЛА ===
-df = pd.read_csv(r"pred_res_cum.csv")
+df = pd.read_csv(r"pred_res_cum_04.csv")
 
 df["RESULT"] = df.apply(calculate_result, axis=1)
 df["CUMULATIVE_RESULT"] = df["RESULT"].cumsum()
