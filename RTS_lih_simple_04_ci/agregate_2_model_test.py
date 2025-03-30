@@ -35,8 +35,8 @@ script_dir = Path(__file__).parent
 os.chdir(script_dir)
 
 # [24, 69] 3
-first_model = 62
-second_model = 91
+first_model = 3
+second_model = 69
 
 # === ЗАГРУЗКА ФАЙЛА ===
 df = pd.read_csv(r"pred_res_cum.csv")
