@@ -53,7 +53,6 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    torch.use_deterministic_algorithms(True)  # Включение детерминированных алгоритмов
 
 
 # === Функция расчета P/L (по предсказанному направлению) ===
@@ -74,9 +73,6 @@ os.chdir(script_dir)
 # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_day_2014.db')
 df = data_load(db_path, '2014-01-01', '2024-01-01')
-
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
 
 for counter in range(1, 101):
     # Удаляем папку __pycache__ (если она была создана)
@@ -106,18 +102,16 @@ for counter in range(1, 101):
     train_dataset = CandlestickDataset(X_train, y_train)
     test_dataset = CandlestickDataset(X_test, y_test)
 
-    # Создаем генератор с фиксированным seed
-    g = torch.Generator()
-    g.manual_seed(42)  # Фиксируем seed для генератора
-
     train_loader = DataLoader(
-        train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker, generator=g
-    )
+        train_dataset, batch_size=32, shuffle=True, worker_init_fn=seed_worker
+        )
     test_loader = DataLoader(
-        test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker, generator=g
-    )
+        test_dataset, batch_size=32, shuffle=False, worker_init_fn=seed_worker
+        )
 
     # === 6. ОБУЧЕНИЕ МОДЕЛИ С ОПТИМИЗАЦИЕЙ ПО P/L ===
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     model = CandleLSTM(vocab_size=27, embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
