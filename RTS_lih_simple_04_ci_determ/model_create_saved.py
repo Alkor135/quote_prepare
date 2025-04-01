@@ -131,7 +131,7 @@ for counter in range(1, 101):
     early_stop_epochs = 200
     epochs_no_improve = 0
 
-    epochs = 2000
+    epochs = 100
     for epoch in range(epochs):
         model.train()
         total_loss = 0
@@ -181,7 +181,7 @@ for counter in range(1, 101):
         # === Ранняя остановка ===
         if epochs_no_improve >= early_stop_epochs:
             print(f"🛑 Early stopping at epoch {epoch + 1}")
-            # Запись лога
+            # Запись лога при ранней остановке
             with open(log_path, 'a') as f:  
                 f.write(
                     f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}; '
@@ -189,6 +189,16 @@ for counter in range(1, 101):
                     f'Best P/L={best_pnl:.2f}\n'
                     )
             break
+
+        # Запись лога по завершении обучения
+        if epoch == epochs - 1:
+            print(f"❌ Training finished without early stopping.")
+            with open(log_path, 'a') as f:  
+                f.write(
+                    f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}; '
+                    f'Epoch best P/L={epoch_best_pnl}; Seed={counter}; '
+                    f'Best P/L={best_pnl:.2f}\n'
+                    )
 
     # === 7. ЗАГРУЗКА ЛУЧШЕЙ МОДЕЛИ И ФИНАЛЬНЫЙ ТЕСТ ===
     print("\n🔹 Loading best model for final evaluation...")

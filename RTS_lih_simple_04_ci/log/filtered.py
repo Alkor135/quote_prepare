@@ -10,16 +10,16 @@ file_path = r"log_model_epoch_seed.txt"
 
 # Список элементов, которые должны быть в строке
 required_elements = [
-    "Seed=33", 
-    "Seed=40", 
+    "Seed=69", 
     "Seed=3;", 
-    "Seed=23", 
-    "Seed=87", 
-    "Seed=15", 
-    "Seed=99", 
-    "Seed=83", 
-    "Seed=72", 
-    "Seed=52"
+    "Seed=29", 
+    "Seed=53", 
+    "Seed=4;", 
+    "Seed=89", 
+    "Seed=62", 
+    "Seed=91", 
+    "Seed=6;", 
+    "Seed=72"
     ]
 
 # Читаем файл и фильтруем строки

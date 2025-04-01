@@ -61,7 +61,7 @@ for counter in range(1, 101):
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = Path(fr"model_stat\best_model_{counter}.pth")
+    model_path = Path(fr"model\best_model_{counter}.pth")
     model = CandleLSTM(vocab_size=27, embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
@@ -98,7 +98,7 @@ for counter in range(1, 101):
     # === 5. ЗАГРУЗКА ОБУЧЕННОЙ МОДЕЛИ ===
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model_path = Path(fr"model_stat\best_model_{counter}.pth")
+    model_path = Path(fr"model\best_model_{counter}.pth")
     model = CandleLSTM(vocab_size=27, embedding_dim=8, hidden_dim=32, output_dim=1).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()

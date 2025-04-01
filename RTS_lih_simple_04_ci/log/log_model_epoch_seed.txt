@@ -1,0 +1,10 @@
+2025-04-01 15:18:07; Epoch best P/L=97; Seed=3; Best P/L=74730.00
+2025-04-01 15:18:36; Epoch best P/L=6; Seed=4; Best P/L=30410.00
+2025-04-01 15:19:42; Epoch best P/L=36; Seed=6; Best P/L=61490.00
+2025-04-01 15:33:41; Epoch best P/L=37; Seed=29; Best P/L=75930.00
+2025-04-01 15:48:54; Epoch best P/L=21; Seed=53; Best P/L=75290.00
+2025-04-01 15:54:36; Epoch best P/L=15; Seed=62; Best P/L=63190.00
+2025-04-01 15:58:55; Epoch best P/L=19; Seed=69; Best P/L=39310.00
+2025-04-01 16:01:05; Epoch best P/L=377; Seed=72; Best P/L=95490.00
+2025-04-01 16:11:38; Epoch best P/L=40; Seed=89; Best P/L=71670.00
+2025-04-01 16:13:23; Epoch best P/L=293; Seed=91; Best P/L=58570.00

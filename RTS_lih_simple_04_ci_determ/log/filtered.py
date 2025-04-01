@@ -12,14 +12,14 @@ file_path = r"log_model_epoch_seed.txt"
 required_elements = [
     "Seed=33", 
     "Seed=40", 
+    "Seed=99", 
     "Seed=3;", 
     "Seed=23", 
+    "Seed=4;", 
     "Seed=87", 
-    "Seed=15", 
-    "Seed=99", 
     "Seed=83", 
     "Seed=72", 
-    "Seed=52"
+    "Seed=15"
     ]
 
 # Читаем файл и фильтруем строки
