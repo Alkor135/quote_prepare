@@ -182,4 +182,4 @@ df_results = pd.DataFrame(results).sort_values(by="Smoothness R²", ascending=Fa
 df_results = df_results.round(4).fillna("-")
 
 # print(df_results.to_string(index=False))
-print(df_results.head(20).to_string(max_rows=10, max_cols=20))
+print(df_results.head(10).to_string(max_rows=10, max_cols=20))
