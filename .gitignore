@@ -178,3 +178,5 @@ features.csv
 *.pth
 
 *.json
+
+*.txt

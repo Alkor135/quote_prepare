@@ -10,6 +10,7 @@ import os
 from data_read import data_load, balance_classes
 import shutil
 import sys
+from datetime import datetime
 sys.dont_write_bytecode = True
 
 # === СОЗДАНИЕ НЕЙРОСЕТИ (LSTM) ===
@@ -73,6 +74,8 @@ os.chdir(script_dir)
 # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\BR_day_2014.db')
 df = data_load(db_path, '2014-01-01', '2024-01-01')
+
+log_path = Path(fr'log\log_model_epoch_seed.txt')
 
 for counter in range(1, 101):
     # Удаляем папку __pycache__ (если она была создана)
@@ -172,7 +175,24 @@ for counter in range(1, 101):
         # === Ранняя остановка ===
         if epochs_no_improve >= early_stop_epochs:
             print(f"🛑 Early stopping at epoch {epoch + 1}")
+            # Запись лога при ранней остановке
+            with open(log_path, 'a') as f:  
+                f.write(
+                    f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}; '
+                    f'Epoch best P/L={epoch_best_pnl}; Seed={counter}; '
+                    f'Best P/L={best_pnl:.2f}\n'
+                    )
             break
+
+        # Запись лога по завершении обучения
+        if epoch == epochs - 1:
+            print(f"❌ Training finished without early stopping.")
+            with open(log_path, 'a') as f:  
+                f.write(
+                    f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}; '
+                    f'Epoch best P/L={epoch_best_pnl}; Seed={counter}; '
+                    f'Best P/L={best_pnl:.2f}\n'
+                    )
 
     # === 7. ЗАГРУЗКА ЛУЧШЕЙ МОДЕЛИ И ФИНАЛЬНЫЙ ТЕСТ ===
     print("\n🔹 Loading best model for final evaluation...")
