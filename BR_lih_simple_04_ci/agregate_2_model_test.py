@@ -135,7 +135,7 @@ plt.show()
 По данным на 25 февраля 2025 года, для покупки фьючерса RTS-3.25 на индекс 
 РТС (RIH5) необходимо иметь на счету гарантийное обеспечение в 38 164,08
 """
-df["CUM_RUB"] = df["CUMULATIVE_RESULT"] * 93.0
+df["CUM_RUB"] = df["CUMULATIVE_RESULT"] * 84
 
 plt.figure(figsize=(12, 6))
 plt.plot(df["TRADEDATE"], df["CUM_RUB"], label="Cumulative Ruble", color="b")
