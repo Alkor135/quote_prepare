@@ -31,8 +31,7 @@ def calculate_result(row):
     
 
 # Установка рабочей директории в папку, где находится файл скрипта
-script_dir = Path(__file__).parent
-os.chdir(script_dir)
+os.chdir(Path(__file__).parent)
 
 # [1, 35] 98
 first_model = 1

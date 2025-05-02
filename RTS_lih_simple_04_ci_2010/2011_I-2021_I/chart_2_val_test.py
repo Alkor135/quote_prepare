@@ -53,7 +53,7 @@ for counter in range(1, 101):
     shutil.rmtree('__pycache__', ignore_errors=True)
     
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ВАЛИДАЦИОННОГО ГРАФИКА ===-------------------------------------------
-    df_fut = data_load(db_path, '2020-01-01', '2021-06-30')
+    df_fut = data_load(db_path, '2019-07-01', '2021-01-01')
 
     df_fut = df_fut.dropna().reset_index(drop=True)
 
@@ -83,7 +83,7 @@ for counter in range(1, 101):
     # split = int(len(df_fut) * 0.85)  # 85% - обучающая выборка, 15% - тестовая
     # df_val = df_fut.iloc[split:].copy()  # Берем последние 15%
     # Выбор строк, где TRADEDATE больше 2020-01-01
-    df_val = df_fut[df_fut['TRADEDATE'] > '2020-06-30'].copy()
+    df_val = df_fut[df_fut['TRADEDATE'] > '2020-01-01'].copy()
 
     df_val["RESULT"] = df_val.apply(calculate_result, axis=1)
 
@@ -92,7 +92,7 @@ for counter in range(1, 101):
 
     # === ЗАГРУЗКА ДАННЫХ ДЛЯ ТЕСТОВАГО ГРАФИКА ===------------------------------------------------
     # end_date = datetime.now().date().strftime("%Y-%m-%d")
-    df_fut = data_load(db_path, '2021-01-01', '2021-12-31')
+    df_fut = data_load(db_path, '2020-07-01', '2021-07-01')
 
     df_fut = df_fut.dropna().reset_index(drop=True)
 
@@ -120,7 +120,7 @@ for counter in range(1, 101):
     df_fut['PREDICTION'] = (predictions > 0.5).astype(int)  # Если Sigmoid
 
     # Выбор строк, где TRADEDATE больше 2020-01-01
-    df_test = df_fut[df_fut['TRADEDATE'] > '2021-06-30'].copy()
+    df_test = df_fut[df_fut['TRADEDATE'] > '2021-01-01'].copy()
 
     df_test["RESULT"] = df_test.apply(calculate_result, axis=1)
 

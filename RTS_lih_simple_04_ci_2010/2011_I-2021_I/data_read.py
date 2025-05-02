@@ -156,8 +156,8 @@ if __name__ == '__main__':
     db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_day_2010.db')
 
     # Переменные с датами
-    start_date = '2010-07-01'
-    end_date = '2020-06-30'
+    start_date = '2011-01-01'
+    end_date = '2021-01-01'
 
     df_fut = data_load(db_path, start_date, end_date)
     print(df_fut)

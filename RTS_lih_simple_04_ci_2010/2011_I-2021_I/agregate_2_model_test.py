@@ -32,10 +32,10 @@ def calculate_result(row):
 
 # Установка рабочей директории в папку, где находится файл скрипта
 os.chdir(Path(__file__).parent)
-60830
-# 53, 16
-first_model = 54
-second_model = 74
+
+# [1, 35] 98
+first_model = 91
+second_model = 96
 
 # === ЗАГРУЗКА ФАЙЛА ===
 df = pd.read_csv(r"pred_res_cum_test.csv")

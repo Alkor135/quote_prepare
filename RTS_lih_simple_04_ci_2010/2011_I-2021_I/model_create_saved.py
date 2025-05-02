@@ -72,7 +72,7 @@ os.chdir(Path(__file__).parent)
 
 # === 2. ЗАГРУЗКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ВАЛИДАЦИИ ===
 db_path = Path(r'C:\Users\Alkor\gd\data_quote_db\RTS_day_2010.db')
-df = data_load(db_path, '2010-01-01', '2019-12-31')
+df = data_load(db_path, '2011-01-01', '2020-12-31')
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
