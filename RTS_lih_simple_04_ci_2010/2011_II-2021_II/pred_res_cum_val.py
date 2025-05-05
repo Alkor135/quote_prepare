@@ -55,7 +55,7 @@ for counter in range(1, 101):  # -----------------------------------------------
     shutil.rmtree('__pycache__', ignore_errors=True)
 
     # === 1. ЗАГРУЗКА ДАННЫХ ===
-    df_fut = data_load(db_path, '2020-01-01', '2021-06-30')
+    df_fut = data_load(db_path, '2021-01-01', '2022-06-30')
     # end_date = datetime.now().date().strftime("%Y-%m-%d")
     # df_fut = data_load(db_path, '2010-01-01', end_date)
 
@@ -87,7 +87,7 @@ for counter in range(1, 101):  # -----------------------------------------------
     df_fut[f'PRED_{counter}'] = (predictions > 0.5).astype(int)  # Если Sigmoid
 
     # Выбор строк, где TRADEDATE больше 
-    df = df_fut[df_fut['TRADEDATE'] > '2020-06-30'].copy()
+    df = df_fut[df_fut['TRADEDATE'] > '2021-06-30'].copy()
 
     # === 3. РАСЧЁТ РЕЗУЛЬТАТОВ ПРОГНОЗА ===
     def calculate_result(row):

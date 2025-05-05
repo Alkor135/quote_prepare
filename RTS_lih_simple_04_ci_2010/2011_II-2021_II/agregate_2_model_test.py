@@ -34,8 +34,8 @@ def calculate_result(row):
 os.chdir(Path(__file__).parent)
 60830
 # 53, 16
-first_model = 54
-second_model = 74
+first_model = 84
+second_model = 9
 
 # === ЗАГРУЗКА ФАЙЛА ===
 df = pd.read_csv(r"pred_res_cum_test.csv")
